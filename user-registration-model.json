@@ -1,0 +1,151 @@
+{
+  "userRegistration": {
+    "description": "Modelo JSON para cadastro de usuário na API EPU-Gestão",
+    "endpoint": "POST /api/auth/register",
+    "contentType": "application/json",
+    "requiredFields": ["username", "email", "password"],
+    "optionalFields": ["fullName", "phone"],
+    "model": {
+      "username": "string (3-30 caracteres, único)",
+      "email": "string (formato de email válido, único)",
+      "password": "string (mínimo 6 caracteres)",
+      "fullName": "string (máximo 100 caracteres, opcional)",
+      "phone": "string (máximo 20 caracteres, opcional)"
+    },
+    "examples": [
+      {
+        "name": "Cadastro Completo",
+        "data": {
+          "username": "joaosilva",
+          "email": "joao.silva@epu.edu.br",
+          "password": "123456",
+          "fullName": "João Silva",
+          "phone": "+55 11 99999-9999"
+        }
+      },
+      {
+        "name": "Cadastro Mínimo (apenas campos obrigatórios)",
+        "data": {
+          "username": "mariasantos",
+          "email": "maria.santos@epu.edu.br",
+          "password": "senha123"
+        }
+      },
+      {
+        "name": "Professor",
+        "data": {
+          "username": "prof.carlos",
+          "email": "carlos.professor@epu.edu.br",
+          "password": "prof2025",
+          "fullName": "Prof. Dr. Carlos Oliveira",
+          "phone": "+55 11 98888-7777"
+        }
+      },
+      {
+        "name": "Estudante",
+        "data": {
+          "username": "ana_estudante",
+          "email": "ana.estudante@epu.edu.br",
+          "password": "estudante123",
+          "fullName": "Ana Carolina Ferreira",
+          "phone": "+55 11 97777-6666"
+        }
+      },
+      {
+        "name": "Funcionário",
+        "data": {
+          "username": "func.admin",
+          "email": "admin.sistema@epu.edu.br",
+          "password": "admin2025",
+          "fullName": "Administrador do Sistema",
+          "phone": "+55 11 96666-5555"
+        }
+      }
+    ],
+    "validationRules": {
+      "username": {
+        "minLength": 3,
+        "maxLength": 30,
+        "pattern": "Apenas letras, números, pontos e underscores",
+        "unique": true,
+        "required": true
+      },
+      "email": {
+        "format": "email",
+        "unique": true,
+        "required": true,
+        "example": "usuario@epu.edu.br"
+      },
+      "password": {
+        "minLength": 6,
+        "required": true,
+        "note": "Será criptografada automaticamente no backend"
+      },
+      "fullName": {
+        "maxLength": 100,
+        "required": false,
+        "trim": true
+      },
+      "phone": {
+        "maxLength": 20,
+        "required": false,
+        "format": "Formato livre, ex: +55 11 99999-9999"
+      }
+    },
+    "responses": {
+      "success": {
+        "status": 201,
+        "example": {
+          "success": true,
+          "message": "User registered successfully",
+          "user": {
+            "id": "60f7b3b3b3b3b3b3b3b3b3b3",
+            "username": "joaosilva",
+            "email": "joao.silva@epu.edu.br",
+            "fullName": "João Silva",
+            "phone": "+55 11 99999-9999",
+            "isActive": true,
+            "role": "user",
+            "createdAt": "2025-06-26T12:00:00.000Z"
+          }
+        }
+      },
+      "errors": {
+        "userExists": {
+          "status": 400,
+          "example": {
+            "success": false,
+            "message": "User already exists"
+          }
+        },
+        "validation": {
+          "status": 400,
+          "example": {
+            "success": false,
+            "message": "Validation failed",
+            "errors": [
+              "Username is required",
+              "Email must be valid",
+              "Password must be at least 6 characters"
+            ]
+          }
+        }
+      }
+    },
+    "curlExample": "curl -X POST http://localhost:5000/api/auth/register \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"username\": \"joaosilva\",\n    \"email\": \"joao.silva@epu.edu.br\",\n    \"password\": \"123456\",\n    \"fullName\": \"João Silva\",\n    \"phone\": \"+55 11 99999-9999\"\n  }'",
+    "thunderClientExample": {
+      "method": "POST",
+      "url": "http://localhost:5000/api/auth/register",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "username": "joaosilva",
+        "email": "joao.silva@epu.edu.br",
+        "password": "123456",
+        "fullName": "João Silva",
+        "phone": "+55 11 99999-9999"
+      }
+    }
+  }
+}
