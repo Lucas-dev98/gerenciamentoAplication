@@ -1,11 +1,12 @@
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = (...args) =>
+  import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const BASE_URL = 'http://localhost:5000/api';
 
 // Test configuration
 const TEST_CONFIG = {
   email: 'teste@csv.com',
-  password: 'teste123'
+  password: 'teste123',
 };
 
 async function testNoticesAPI() {
@@ -19,11 +20,13 @@ async function testNoticesAPI() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(TEST_CONFIG)
+      body: JSON.stringify(TEST_CONFIG),
     });
 
     if (!loginResponse.ok) {
-      throw new Error(`Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
+      throw new Error(
+        `Login failed: ${loginResponse.status} ${loginResponse.statusText}`
+      );
     }
 
     const loginData = await loginResponse.json();
@@ -32,13 +35,14 @@ async function testNoticesAPI() {
 
     // Step 2: Test creating a notice with minimal valid data
     console.log('\n2. 📝 Testing notice creation...');
-    
+
     const noticeData = {
       title: 'Test Notice Title',
-      content: 'This is a test notice content with more than 10 characters to meet validation requirements.',
+      content:
+        'This is a test notice content with more than 10 characters to meet validation requirements.',
       type: 'announcement',
       priority: 'medium',
-      isPinned: false
+      isPinned: false,
     };
 
     console.log('Sending notice data:', JSON.stringify(noticeData, null, 2));
@@ -46,10 +50,10 @@ async function testNoticesAPI() {
     const createResponse = await fetch(`${BASE_URL}/notices`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(noticeData)
+      body: JSON.stringify(noticeData),
     });
 
     console.log('Response status:', createResponse.status);
@@ -74,9 +78,9 @@ async function testNoticesAPI() {
     console.log('\n3. 📋 Testing get all notices...');
     const getResponse = await fetch(`${BASE_URL}/notices`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     if (getResponse.ok) {
@@ -86,11 +90,12 @@ async function testNoticesAPI() {
     } else {
       console.log('❌ Get notices failed:', getResponse.status);
     }
-
   } catch (error) {
     console.error('❌ Error during notices API test:', error.message);
     if (error.code === 'ECONNREFUSED') {
-      console.log('💡 Make sure the backend server is running on http://localhost:5000');
+      console.log(
+        '💡 Make sure the backend server is running on http://localhost:5000'
+      );
     }
   }
 }

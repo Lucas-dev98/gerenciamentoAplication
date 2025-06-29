@@ -1,11 +1,12 @@
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = (...args) =>
+  import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const BASE_URL = 'http://localhost:5000/api';
 
 // Test configuration
 const TEST_CONFIG = {
   email: 'teste@csv.com',
-  password: 'teste123'
+  password: 'teste123',
 };
 
 async function testMaintenanceType() {
@@ -19,11 +20,13 @@ async function testMaintenanceType() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(TEST_CONFIG)
+      body: JSON.stringify(TEST_CONFIG),
     });
 
     if (!loginResponse.ok) {
-      throw new Error(`Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
+      throw new Error(
+        `Login failed: ${loginResponse.status} ${loginResponse.statusText}`
+      );
     }
 
     const loginData = await loginResponse.json();
@@ -32,24 +35,27 @@ async function testMaintenanceType() {
 
     // Step 2: Test maintenance type specifically
     console.log('\n2. 🔧 Testing maintenance type...');
-    
+
     const maintenanceNotice = {
       title: 'Maintenance Test Notice',
       content: 'This is a test notice for maintenance type validation.',
       type: 'maintenance',
       priority: 'medium',
-      isPinned: false
+      isPinned: false,
     };
 
-    console.log('Sending maintenance notice data:', JSON.stringify(maintenanceNotice, null, 2));
+    console.log(
+      'Sending maintenance notice data:',
+      JSON.stringify(maintenanceNotice, null, 2)
+    );
 
     const createResponse = await fetch(`${BASE_URL}/notices`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(maintenanceNotice)
+      body: JSON.stringify(maintenanceNotice),
     });
 
     console.log('Response status:', createResponse.status);
@@ -62,7 +68,6 @@ async function testMaintenanceType() {
     }
 
     console.log('✅ Maintenance notice created successfully');
-
   } catch (error) {
     console.error('❌ Error during maintenance test:', error.message);
   }

@@ -1,11 +1,12 @@
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = (...args) =>
+  import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const BASE_URL = 'http://localhost:5000/api';
 
 // Test configuration
 const TEST_CONFIG = {
   email: 'teste@csv.com',
-  password: 'teste123'
+  password: 'teste123',
 };
 
 async function testNoticesFrontendFormat() {
@@ -19,11 +20,13 @@ async function testNoticesFrontendFormat() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(TEST_CONFIG)
+      body: JSON.stringify(TEST_CONFIG),
     });
 
     if (!loginResponse.ok) {
-      throw new Error(`Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
+      throw new Error(
+        `Login failed: ${loginResponse.status} ${loginResponse.statusText}`
+      );
     }
 
     const loginData = await loginResponse.json();
@@ -32,26 +35,30 @@ async function testNoticesFrontendFormat() {
 
     // Step 2: Test creating a notice with frontend data format
     console.log('\n2. 📝 Testing notice creation with frontend format...');
-    
+
     // This is exactly what the frontend sends
     const frontendNoticeData = {
       title: 'Frontend Test Notice',
-      content: 'This is a test notice from frontend format with proper field names.',
+      content:
+        'This is a test notice from frontend format with proper field names.',
       type: 'info',
       priority: 'medium',
       isPinned: false,
-      expiryDate: '2025-12-31'  // using expiryDate instead of expiresAt
+      expiryDate: '2025-12-31', // using expiryDate instead of expiresAt
     };
 
-    console.log('Sending frontend notice data:', JSON.stringify(frontendNoticeData, null, 2));
+    console.log(
+      'Sending frontend notice data:',
+      JSON.stringify(frontendNoticeData, null, 2)
+    );
 
     const createResponse = await fetch(`${BASE_URL}/notices`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(frontendNoticeData)
+      body: JSON.stringify(frontendNoticeData),
     });
 
     console.log('Response status:', createResponse.status);
@@ -67,12 +74,12 @@ async function testNoticesFrontendFormat() {
 
     // Step 3: Test with different types and priorities
     console.log('\n3. 🎯 Testing different types and priorities...');
-    
+
     const testCases = [
       { type: 'announcement', priority: 'high' },
       { type: 'warning', priority: 'critical' },
       { type: 'urgent', priority: 'low' },
-      { type: 'maintenance', priority: 'medium' }
+      { type: 'maintenance', priority: 'medium' },
     ];
 
     for (const testCase of testCases) {
@@ -81,23 +88,26 @@ async function testNoticesFrontendFormat() {
         content: `Testing ${testCase.type} type with ${testCase.priority} priority.`,
         type: testCase.type,
         priority: testCase.priority,
-        isPinned: false
+        isPinned: false,
       };
 
       const testResponse = await fetch(`${BASE_URL}/notices`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(testNoticeData)
+        body: JSON.stringify(testNoticeData),
       });
 
       if (testResponse.ok) {
         console.log(`✅ ${testCase.type}/${testCase.priority} - Success`);
       } else {
         const errorData = await testResponse.json();
-        console.log(`❌ ${testCase.type}/${testCase.priority} - Failed:`, errorData.message);
+        console.log(
+          `❌ ${testCase.type}/${testCase.priority} - Failed:`,
+          errorData.message
+        );
       }
     }
 
@@ -105,24 +115,25 @@ async function testNoticesFrontendFormat() {
     console.log('\n4. 📋 Verifying created notices...');
     const getResponse = await fetch(`${BASE_URL}/notices`, {
       headers: {
-        'Authorization': `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      },
     });
 
     if (getResponse.ok) {
       const getData = await getResponse.json();
       console.log(`✅ Found ${getData.data?.count || 0} notices in total`);
-      
+
       if (getData.data?.notices?.length > 0) {
         console.log('\n📑 Recent notices:');
         getData.data.notices.slice(0, 3).forEach((notice, index) => {
-          console.log(`${index + 1}. ${notice.title} (${notice.type}/${notice.priority})`);
+          console.log(
+            `${index + 1}. ${notice.title} (${notice.type}/${notice.priority})`
+          );
         });
       }
     } else {
       console.log('❌ Failed to retrieve notices');
     }
-
   } catch (error) {
     console.error('❌ Error during notices frontend test:', error.message);
   }
