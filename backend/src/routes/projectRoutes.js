@@ -9,6 +9,7 @@ const {
   addTeamMember,
   removeTeamMember,
   uploadProjectFromCSV,
+  updateProjectFromCSV,
   // Novas funcionalidades baseadas no Flask
   getProcedimentoParada,
   getManutencao,
@@ -34,6 +35,7 @@ router.use(apiLimiter);
 // Rotas CRUD básicas para projetos
 router.post(
   '/',
+  uploadCSVMiddleware,
   createValidationMiddleware(projectValidation, 'create'),
   createProject
 ); // Criar projeto
@@ -55,6 +57,9 @@ router.delete('/:id/team/:userId', removeTeamMember); // Remover membro da equip
 
 // Rota para upload de projeto via CSV
 router.post('/upload-csv', uploadCSVMiddleware, uploadProjectFromCSV);
+
+// Rota para atualizar projeto existente com novo CSV
+router.put('/:id/update-csv', uploadCSVMiddleware, updateProjectFromCSV);
 
 // NOVAS ROTAS BASEADAS NO FLASK app.py
 // Replicar exatamente as rotas do Flask

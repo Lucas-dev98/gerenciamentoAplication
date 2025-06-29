@@ -62,6 +62,13 @@ const register = async (req, res, next) => {
 
     const user = await authService.register(userData);
 
+    // Gerar token para auto-login após registro
+    const token = authService.generateToken(
+      user._id,
+      user.email,
+      user.username
+    );
+
     logger.info(`Usuário registrado com sucesso: ${username} (${email})`);
 
     res.status(201).json({
@@ -74,6 +81,7 @@ const register = async (req, res, next) => {
         fullName: user.fullName,
         createdAt: user.createdAt,
       },
+      token: token, // Incluir token para auto-login
     });
   } catch (error) {
     logger.error('Erro no registro de usuário', {

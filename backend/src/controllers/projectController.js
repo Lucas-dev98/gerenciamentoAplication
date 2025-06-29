@@ -966,6 +966,177 @@ const getAllFrentes = async (req, res, next) => {
   }
 };
 
+// Função para atualizar projeto existente com novo CSV
+const updateProjectFromCSV = async (req, res, next) => {
+  const action = 'UPDATE_PROJECT_CSV';
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+
+    logger.info(`${action}: Starting CSV project update`, {
+      projectId: id,
+      userId: req.user?.id || 'anonymous',
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+    });
+
+    // Validar se projeto existe
+    const existingProject = await projectService.getProjectById(id);
+    if (!existingProject) {
+      logger.warn(`${action}: Project not found`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: ['O projeto especificado não existe'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Validar se arquivo foi enviado
+    if (!req.file) {
+      logger.warn(`${action}: No file uploaded`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Nenhum arquivo foi enviado',
+        details: ['É necessário enviar um arquivo CSV para processar'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Validar tipo de arquivo
+    if (!req.file.originalname.toLowerCase().endsWith('.csv')) {
+      logger.warn(`${action}: Invalid file type`, {
+        fileName: req.file.originalname,
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Tipo de arquivo inválido',
+        details: ['Apenas arquivos CSV são aceitos'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Usar nome do projeto existente ou permitir novo nome
+    const { projectName } = req.body;
+    const nomeProject = projectName || existingProject.name;
+
+    // Processar arquivo CSV - isto irá criar os dados atualizados
+    const resultado = await csvProjectProcessor.processarArquivoCSV(
+      req.file.path,
+      nomeProject,
+      req.user?.id || existingProject.createdBy
+    );
+
+    // Atualizar o projeto existente com os novos dados do CSV
+    const updatedProjectData = {
+      name: nomeProject,
+      description: resultado.project.description,
+      status: resultado.project.status,
+      priority: resultado.project.priority,
+      progress: resultado.project.progress,
+      activities: resultado.project.activities,
+      // Manter dados existentes que não vêm do CSV
+      createdBy: existingProject.createdBy,
+      createdAt: existingProject.createdAt,
+      // Atualizar timestamp de modificação
+      updatedAt: new Date(),
+    };
+
+    const updatedProject = await projectService.updateProject(
+      id,
+      updatedProjectData
+    );
+
+    // Limpar arquivo temporário
+    try {
+      require('fs').unlinkSync(req.file.path);
+    } catch (cleanupError) {
+      logger.warn('Erro ao limpar arquivo temporário', {
+        error: cleanupError.message,
+      });
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Project updated successfully from CSV`, {
+      projectId: id,
+      projectName: updatedProject.name,
+      totalActivities: resultado.estatisticas.totalAtividades,
+      progressoGeral: resultado.estatisticas.progressoGeral,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Projeto atualizado com sucesso a partir do CSV',
+      data: {
+        project: {
+          id: updatedProject._id,
+          name: updatedProject.name,
+          description: updatedProject.description,
+          status: updatedProject.status,
+          priority: updatedProject.priority,
+          progress: updatedProject.progress,
+          updatedAt: updatedProject.updatedAt,
+        },
+        estatisticas: resultado.estatisticas,
+        blocos: {
+          parada: resultado.blocos.parada.length,
+          manutencao: resultado.blocos.manutencao.length,
+          partida: resultado.blocos.partida.length,
+        },
+        processamento: {
+          totalAtividades: resultado.estatisticas.totalAtividades,
+          atividadesCompletas: resultado.estatisticas.atividadesCompletas,
+          progressoGeral: `${resultado.estatisticas.progressoGeral}%`,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Error updating project from CSV`, {
+      projectId: req.params.id,
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    // Limpar arquivo temporário em caso de erro
+    if (req.file && req.file.path) {
+      try {
+        require('fs').unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        logger.warn('Erro ao limpar arquivo temporário após erro', {
+          error: cleanupError.message,
+        });
+      }
+    }
+
+    next(error);
+  }
+};
+
 module.exports = {
   createProject,
   getAllProjects,
@@ -976,6 +1147,7 @@ module.exports = {
   addTeamMember,
   removeTeamMember,
   uploadProjectFromCSV,
+  updateProjectFromCSV,
   getProcedimentoParada,
   getManutencao,
   getProcedimentoPartida,

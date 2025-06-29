@@ -27,7 +27,7 @@ const apiLimiter = rateLimit({
 // Rate limiting for sensitive operations
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs
+  max: 50, // limit each IP to 50 requests per windowMs (increased for better usability)
   message: {
     success: false,
     message: 'Too many sensitive operations, please try again later.',

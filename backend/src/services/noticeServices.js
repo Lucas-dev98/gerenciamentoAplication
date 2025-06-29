@@ -1,5 +1,88 @@
-const Notice = require('../models/noticeModels');
 const logger = require('../utils/logger');
+
+// Importação condicional do modelo
+let Notice;
+try {
+  Notice = require('../models/noticeModels');
+} catch (error) {
+  logger.debug('Modelo de notice não carregado, usando modo mock', {
+    error: error.message,
+  });
+}
+
+// Mock storage para desenvolvimento sem banco
+const mockNotices = new Map();
+
+// Adicionar alguns dados de exemplo no modo mock
+const initializeMockData = () => {
+  if (mockNotices.size === 0) {
+    const sampleNotices = [
+      {
+        _id: 'notice1',
+        title: 'Bem-vindo ao EPU-Gestão!',
+        content:
+          'Sistema de gestão de projetos EPU funcionando em modo de desenvolvimento.',
+        type: 'info',
+        priority: 1,
+        isActive: true,
+        isPinned: true,
+        targetAudience: 'all',
+        author: 'sistema',
+        publishDate: new Date(),
+        expiryDate: null,
+        views: 0,
+        readBy: [],
+        readPercentage: 0,
+        tags: ['sistema', 'desenvolvimento'],
+        isExpired: false,
+        daysUntilExpiry: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        _id: 'notice2',
+        title: 'Modo de Desenvolvimento Ativo',
+        content:
+          'O sistema está rodando sem banco de dados MongoDB. Todos os dados são temporários.',
+        type: 'warning',
+        priority: 2,
+        isActive: true,
+        isPinned: false,
+        targetAudience: 'all',
+        author: 'sistema',
+        publishDate: new Date(),
+        expiryDate: null,
+        views: 0,
+        readBy: [],
+        readPercentage: 0,
+        tags: ['aviso', 'desenvolvimento'],
+        isExpired: false,
+        daysUntilExpiry: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    sampleNotices.forEach((notice) => {
+      mockNotices.set(notice._id, notice);
+    });
+
+    logger.info('Mock notices initialized', { count: mockNotices.size });
+  }
+};
+
+// Verificar se deve usar modo mock (sem banco)
+const useMockMode = () => {
+  // Usar MongoDB se DB_URI estiver configurada e não estiver em modo mock explícito
+  const shouldUseMock =
+    !process.env.DB_URI || process.env.NODE_ENV === 'development-mock';
+
+  if (shouldUseMock) {
+    initializeMockData();
+  }
+
+  return shouldUseMock;
+};
 
 const createNotice = async (noticeData) => {
   try {
@@ -10,6 +93,72 @@ const createNotice = async (noticeData) => {
       priority: noticeData.priority,
       targetAudience: noticeData.targetAudience,
     });
+
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Create Notice',
+        {
+          noticeTitle: noticeData.title,
+          author: noticeData.author,
+        }
+      );
+
+      // Verificar se aviso já existe no mock (por título)
+      for (const [key, notice] of mockNotices) {
+        if (notice.title === noticeData.title) {
+          logger.warn(
+            'Tentativa de criar aviso com título já existente (mock)',
+            {
+              noticeTitle: noticeData.title,
+              existingNoticeId: key,
+            }
+          );
+
+          const error = new Error(`Aviso com este título já existe`);
+          error.type = 'DUPLICATE_ERROR';
+          error.field = 'title';
+          throw error;
+        }
+      }
+
+      // Criar aviso mock
+      const noticeId = Date.now().toString();
+      const mockNotice = {
+        _id: noticeId,
+        title: noticeData.title,
+        content: noticeData.content,
+        type: noticeData.type || 'info',
+        priority: noticeData.priority || 'medium',
+        isActive:
+          noticeData.isActive !== undefined ? noticeData.isActive : true,
+        isPinned: noticeData.isPinned || false,
+        targetAudience: noticeData.targetAudience || 'all',
+        author: noticeData.author || 'user',
+        publishDate: new Date(),
+        expiryDate: noticeData.expiryDate || null,
+        views: 0,
+        readBy: [],
+        readPercentage: 0,
+        tags: noticeData.tags || [],
+        isExpired: false,
+        daysUntilExpiry: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockNotices.set(noticeId, mockNotice);
+
+      logger.info('Aviso criado com sucesso (mock)', {
+        noticeId,
+        noticeTitle: mockNotice.title,
+        author: mockNotice.author,
+        type: mockNotice.type,
+        priority: mockNotice.priority,
+      });
+
+      return mockNotice;
+    }
 
     const notice = new Notice(noticeData);
     await notice.save();
@@ -24,6 +173,10 @@ const createNotice = async (noticeData) => {
 
     return notice;
   } catch (error) {
+    if (error.type === 'DUPLICATE_ERROR') {
+      throw error;
+    }
+
     logger.error('NOTICE_SERVICE: Failed to create notice', {
       error: error.message,
       stack: error.stack,
@@ -61,6 +214,53 @@ const getAllNotices = async (filters = {}) => {
       filters,
       filtersCount: Object.keys(filters).length,
     });
+
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Get All Notices',
+        { filters }
+      );
+
+      // Aplicar filtros aos dados mock
+      let notices = Array.from(mockNotices.values());
+
+      if (filters.type)
+        notices = notices.filter((n) => n.type === filters.type);
+      if (filters.priority)
+        notices = notices.filter((n) => n.priority === filters.priority);
+      if (filters.author)
+        notices = notices.filter((n) => n.author === filters.author);
+      if (filters.targetAudience)
+        notices = notices.filter(
+          (n) => n.targetAudience === filters.targetAudience
+        );
+      if (filters.isActive !== undefined)
+        notices = notices.filter((n) => n.isActive === filters.isActive);
+      if (filters.isPinned !== undefined)
+        notices = notices.filter((n) => n.isPinned === filters.isPinned);
+
+      // Filtrar por data de expiração
+      if (filters.includeExpired === false) {
+        notices = notices.filter(
+          (n) => !n.expiryDate || n.expiryDate >= new Date()
+        );
+      }
+
+      // Ordenar por isPinned e publishDate
+      notices.sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return b.isPinned - a.isPinned;
+        return new Date(b.publishDate) - new Date(a.publishDate);
+      });
+
+      logger.info('Avisos recuperados com sucesso (mock)', {
+        count: notices.length,
+        appliedFilters: filters,
+        pinnedCount: notices.filter((n) => n.isPinned).length,
+      });
+
+      return notices;
+    }
 
     const query = {};
 
@@ -239,6 +439,51 @@ const incrementNoticeViews = async (noticeId) => {
 
 const getActiveNotices = async (targetAudience = 'all') => {
   try {
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Get Active Notices',
+        {
+          targetAudience,
+        }
+      );
+
+      const now = new Date();
+      let notices = Array.from(mockNotices.values()).filter((notice) => {
+        // Filtrar apenas notices ativas
+        if (!notice.isActive) return false;
+
+        // Verificar se não expirou
+        if (notice.expiryDate && new Date(notice.expiryDate) < now)
+          return false;
+
+        // Verificar audiência
+        if (
+          notice.targetAudience !== 'all' &&
+          notice.targetAudience !== targetAudience
+        )
+          return false;
+
+        return true;
+      });
+
+      // Ordenar por prioridade e data
+      notices.sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return b.isPinned - a.isPinned;
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return new Date(b.publishDate) - new Date(a.publishDate);
+      });
+
+      // Limitar a 50
+      notices = notices.slice(0, 50);
+
+      logger.info(
+        `Recuperados ${notices.length} avisos ativos para ${targetAudience} (mock)`
+      );
+      return notices;
+    }
+
+    // Modo normal com banco
     const query = {
       isActive: true,
       $or: [{ expiryDate: { $gte: new Date() } }, { expiryDate: null }],

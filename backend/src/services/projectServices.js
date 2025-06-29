@@ -1,5 +1,122 @@
-const Project = require('../models/projectModels');
 const logger = require('../utils/logger');
+
+// Importação condicional do modelo
+let Project;
+try {
+  Project = require('../models/projectModels');
+} catch (error) {
+  logger.debug('Modelo de projeto não carregado, usando modo mock', {
+    error: error.message,
+  });
+}
+
+// Mock storage para desenvolvimento sem banco
+const mockProjects = new Map();
+
+// Adicionar alguns dados de exemplo no modo mock
+const initializeMockData = () => {
+  if (mockProjects.size === 0) {
+    const sampleProjects = [
+      {
+        _id: 'project1',
+        name: 'Projeto de Exemplo - Desenvolvimento',
+        description:
+          'Este é um projeto de exemplo para demonstrar o sistema em funcionamento.',
+        owner: '1751154505518', // ID do usuário logado
+        status: 'active',
+        priority: 'high',
+        progress: 45,
+        activities: [
+          {
+            name: 'Análise de Requisitos',
+            status: 'completed',
+            progress: 100,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+          {
+            name: 'Design da Interface',
+            status: 'in_progress',
+            progress: 70,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+          {
+            name: 'Implementação Backend',
+            status: 'in_progress',
+            progress: 60,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+          {
+            name: 'Testes',
+            status: 'pending',
+            progress: 0,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+        ],
+        tags: ['desenvolvimento', 'web', 'javascript'],
+        createdAt: new Date('2025-06-01'),
+        updatedAt: new Date(),
+        dueDate: new Date('2025-07-30'),
+        team: [],
+        isActive: true,
+      },
+      {
+        _id: 'project2',
+        name: 'Sistema EPU-Gestão',
+        description:
+          'Desenvolvimento do sistema de gestão de projetos para EPU.',
+        owner: '1751154505518',
+        status: 'active',
+        priority: 'high',
+        progress: 75,
+        activities: [
+          {
+            name: 'Autenticação',
+            status: 'completed',
+            progress: 100,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+          {
+            name: 'Gestão de Projetos',
+            status: 'in_progress',
+            progress: 80,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+          {
+            name: 'Dashboard',
+            status: 'in_progress',
+            progress: 60,
+            assignee: 'Lucas Oliveira Bastos',
+          },
+        ],
+        tags: ['sistema', 'gestão', 'react', 'node'],
+        createdAt: new Date('2025-05-15'),
+        updatedAt: new Date(),
+        dueDate: new Date('2025-08-15'),
+        team: [],
+        isActive: true,
+      },
+    ];
+
+    sampleProjects.forEach((project) => {
+      mockProjects.set(project._id, project);
+    });
+
+    logger.info('Mock projects initialized', { count: mockProjects.size });
+  }
+};
+
+// Verificar se deve usar modo mock (sem banco)
+const useMockMode = () => {
+  // Usar MongoDB se DB_URI estiver configurada e não estiver em modo mock explícito
+  const shouldUseMock =
+    !process.env.DB_URI || process.env.NODE_ENV === 'development-mock';
+
+  if (shouldUseMock) {
+    initializeMockData();
+  }
+
+  return shouldUseMock;
+};
 
 const createProject = async (projectData) => {
   try {
@@ -10,6 +127,63 @@ const createProject = async (projectData) => {
       priority: projectData.priority,
     });
 
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info('🔧 Usando modo desenvolvimento (sem banco) - Projects', {
+        projectName: projectData.name,
+        owner: projectData.owner,
+      });
+
+      // Verificar se projeto já existe no mock
+      for (const [key, project] of mockProjects) {
+        if (project.name === projectData.name) {
+          logger.warn(
+            'Tentativa de criar projeto com nome já existente (mock)',
+            {
+              projectName: projectData.name,
+              existingProjectId: key,
+            }
+          );
+
+          const error = new Error(`Projeto com este nome já existe`);
+          error.type = 'DUPLICATE_ERROR';
+          error.field = 'name';
+          throw error;
+        }
+      }
+
+      // Criar projeto mock
+      const projectId = Date.now().toString();
+      const mockProject = {
+        _id: projectId,
+        name: projectData.name,
+        description: projectData.description || '',
+        owner: projectData.owner,
+        status: projectData.status || 'active',
+        priority: projectData.priority || 'medium',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        progress: projectData.progress || 0,
+        activities: projectData.activities || [],
+        tags: projectData.tags || [],
+        dueDate: projectData.dueDate,
+        budget: projectData.budget,
+        team: projectData.team || [],
+      };
+
+      mockProjects.set(projectId, mockProject);
+
+      logger.info('Projeto criado com sucesso (mock)', {
+        projectId,
+        projectName: mockProject.name,
+        owner: mockProject.owner,
+        status: mockProject.status,
+      });
+
+      return mockProject;
+    }
+
+    // Modo normal com banco
     const project = new Project(projectData);
     await project.save();
 
@@ -60,6 +234,37 @@ const getAllProjects = async (filters = {}) => {
       filtersCount: Object.keys(filters).length,
     });
 
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Get All Projects'
+      );
+
+      let projects = Array.from(mockProjects.values());
+
+      // Aplicar filtros no modo mock
+      if (filters.status) {
+        projects = projects.filter((p) => p.status === filters.status);
+      }
+      if (filters.priority) {
+        projects = projects.filter((p) => p.priority === filters.priority);
+      }
+      if (filters.owner) {
+        projects = projects.filter((p) => p.owner === filters.owner);
+      }
+      if (filters.isActive !== undefined) {
+        projects = projects.filter((p) => p.isActive === filters.isActive);
+      }
+
+      logger.info('Projetos recuperados com sucesso (mock)', {
+        count: projects.length,
+        appliedFilters: filters,
+      });
+
+      return projects;
+    }
+
+    // Modo normal com banco
     const query = {};
 
     // Aplicar filtros
@@ -98,7 +303,34 @@ const getProjectById = async (id) => {
       projectId: id,
     });
 
-    // Validate ObjectId format
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Get Project By ID',
+        {
+          projectId: id,
+        }
+      );
+
+      const project = mockProjects.get(id);
+
+      if (project) {
+        logger.info('Projeto recuperado com sucesso (mock)', {
+          projectId: project._id,
+          projectName: project.name,
+          owner: project.owner,
+        });
+        return project;
+      } else {
+        logger.warn('Projeto não encontrado (mock)', {
+          projectId: id,
+          availableProjects: Array.from(mockProjects.keys()),
+        });
+        return null;
+      }
+    }
+
+    // Modo normal com banco - Validar ObjectId
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       logger.warn('PROJECT_SERVICE: Invalid project ID format', {
         projectId: id,
@@ -154,7 +386,46 @@ const updateProject = async (id, updateData) => {
       fieldsCount: Object.keys(updateData).length,
     });
 
-    // Validate ObjectId format
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Updating Project',
+        {
+          projectId: id,
+          updateFields: Object.keys(updateData),
+        }
+      );
+
+      // Buscar projeto no mock
+      const project = mockProjects.get(id);
+      if (!project) {
+        logger.warn('PROJECT_SERVICE: Project not found for update (mock)', {
+          projectId: id,
+        });
+        return null;
+      }
+
+      // Atualizar o projeto com os novos dados
+      const updatedProject = {
+        ...project,
+        ...updateData,
+        updatedAt: new Date(),
+      };
+
+      // Salvar de volta no mock
+      mockProjects.set(id, updatedProject);
+
+      logger.info('PROJECT_SERVICE: Project updated successfully (mock)', {
+        projectId: updatedProject._id,
+        projectName: updatedProject.name,
+        updatedFields: Object.keys(updateData),
+        fieldsCount: Object.keys(updateData).length,
+      });
+
+      return updatedProject;
+    }
+
+    // Validate ObjectId format for database mode
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       logger.warn('PROJECT_SERVICE: Invalid project ID format for update', {
         projectId: id,
@@ -221,7 +492,37 @@ const deleteProject = async (id) => {
       projectId: id,
     });
 
-    // Validate ObjectId format
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Deleting Project',
+        {
+          projectId: id,
+        }
+      );
+
+      // Buscar projeto no mock
+      const project = mockProjects.get(id);
+      if (!project) {
+        logger.warn('PROJECT_SERVICE: Project not found for deletion (mock)', {
+          projectId: id,
+        });
+        return null;
+      }
+
+      // Remover do mock
+      mockProjects.delete(id);
+
+      logger.info('PROJECT_SERVICE: Project deleted successfully (mock)', {
+        projectId: project._id,
+        projectName: project.name,
+        owner: project.owner,
+      });
+
+      return project;
+    }
+
+    // Validate ObjectId format for database mode
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       logger.warn('PROJECT_SERVICE: Invalid project ID format for deletion', {
         projectId: id,

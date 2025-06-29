@@ -20,7 +20,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint src",
-    "format": "prettier --write src/**/*.{js,jsx}"
+    "format": "prettier --write src/**/*.{js,jsx}",
+    "docker:build": "docker build -t epu-backend .",
+    "docker:run": "docker run -p 5000:5000 epu-backend",
+    "health": "node healthcheck.js"
   },
   "keywords": [],
   "author": "",
