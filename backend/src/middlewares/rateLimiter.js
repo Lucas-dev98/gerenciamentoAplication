@@ -15,13 +15,17 @@ const authLimiter = rateLimit({
 // Rate limiting for general API routes
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 2000, // limit each IP to 2000 requests per windowMs (very generous for development)
   message: {
     success: false,
     message: 'Too many requests, please try again later.',
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip successful requests to extend the limit
+  skipSuccessfulRequests: false,
+  // Skip failed requests to extend the limit
+  skipFailedRequests: true,
 });
 
 // Rate limiting for sensitive operations

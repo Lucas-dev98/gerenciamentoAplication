@@ -5,6 +5,7 @@ const connectDB = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const noticeRoutes = require('./routes/noticeRoutes');
+const eventRoutes = require('./routes/eventRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 const requestIdMiddleware = require('./middlewares/requestId');
 const logger = require('./utils/logger');
@@ -62,6 +63,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notices', noticeRoutes);
+app.use('/api/events', eventRoutes);
 
 app.use(errorHandler);
 

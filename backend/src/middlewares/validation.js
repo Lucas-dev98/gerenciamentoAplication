@@ -218,17 +218,17 @@ const noticeValidation = {
     }
 
     const validTypes = [
-      'announcement',
-      'warning',
       'info',
+      'warning',
       'urgent',
-      'reminder',
+      'announcement',
+      'maintenance',
     ];
     if (data.type && !validTypes.includes(data.type)) {
       errors.push(`Tipo deve ser um dos seguintes: ${validTypes.join(', ')}`);
     }
 
-    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    const validPriorities = ['low', 'medium', 'high', 'critical'];
     if (data.priority && !validPriorities.includes(data.priority)) {
       errors.push(
         `Prioridade deve ser uma das seguintes: ${validPriorities.join(', ')}`
@@ -264,23 +264,174 @@ const noticeValidation = {
     }
 
     const validTypes = [
-      'announcement',
-      'warning',
       'info',
+      'warning',
       'urgent',
-      'reminder',
+      'announcement',
+      'maintenance',
     ];
     if (data.type !== undefined && !validTypes.includes(data.type)) {
       errors.push(`Tipo deve ser um dos seguintes: ${validTypes.join(', ')}`);
     }
 
-    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    const validPriorities = ['low', 'medium', 'high', 'critical'];
     if (
       data.priority !== undefined &&
       !validPriorities.includes(data.priority)
     ) {
       errors.push(
         `Prioridade deve ser uma das seguintes: ${validPriorities.join(', ')}`
+      );
+    }
+
+    return errors;
+  },
+};
+
+// Event validation schemas
+const eventValidation = {
+  create: (data) => {
+    const errors = [];
+
+    // Nome do evento
+    if (!data.name || data.name.trim().length < 3) {
+      errors.push('Nome do evento deve ter pelo menos 3 caracteres');
+    }
+    if (data.name && data.name.length > 100) {
+      errors.push('Nome do evento deve ter no máximo 100 caracteres');
+    }
+
+    // Tipo do evento
+    const validEventTypes = [
+      'reuniao',
+      'treinamento',
+      'manutencao',
+      'inspecao',
+      'auditoria',
+      'emergencia',
+      'outro',
+    ];
+    if (!data.eventType) {
+      errors.push('Tipo do evento é obrigatório');
+    } else if (!validEventTypes.includes(data.eventType)) {
+      errors.push(
+        `Tipo do evento deve ser um dos seguintes: ${validEventTypes.join(', ')}`
+      );
+    }
+
+    // Data
+    if (!data.date) {
+      errors.push('Data do evento é obrigatória');
+    } else if (!validator.isISO8601(data.date)) {
+      errors.push('Data deve ter formato válido (ISO 8601)');
+    }
+
+    // Hora
+    if (!data.time) {
+      errors.push('Hora do evento é obrigatória');
+    } else if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(data.time)) {
+      errors.push('Hora deve ter formato válido (HH:mm)');
+    }
+
+    // Local
+    if (!data.location || data.location.trim().length < 2) {
+      errors.push('Local do evento deve ter pelo menos 2 caracteres');
+    }
+    if (data.location && data.location.length > 200) {
+      errors.push('Local deve ter no máximo 200 caracteres');
+    }
+
+    // Observações (opcional)
+    if (data.observations && data.observations.length > 1000) {
+      errors.push('Observações devem ter no máximo 1000 caracteres');
+    }
+
+    // Status (opcional)
+    const validStatuses = [
+      'agendado',
+      'em_andamento',
+      'concluido',
+      'cancelado',
+    ];
+    if (data.status && !validStatuses.includes(data.status)) {
+      errors.push(
+        `Status deve ser um dos seguintes: ${validStatuses.join(', ')}`
+      );
+    }
+
+    return errors;
+  },
+
+  update: (data) => {
+    const errors = [];
+
+    // Nome do evento
+    if (data.name !== undefined) {
+      if (data.name.trim().length < 3) {
+        errors.push('Nome do evento deve ter pelo menos 3 caracteres');
+      }
+      if (data.name.length > 100) {
+        errors.push('Nome do evento deve ter no máximo 100 caracteres');
+      }
+    }
+
+    // Tipo do evento
+    const validEventTypes = [
+      'reuniao',
+      'treinamento',
+      'manutencao',
+      'inspecao',
+      'auditoria',
+      'emergencia',
+      'outro',
+    ];
+    if (
+      data.eventType !== undefined &&
+      !validEventTypes.includes(data.eventType)
+    ) {
+      errors.push(
+        `Tipo do evento deve ser um dos seguintes: ${validEventTypes.join(', ')}`
+      );
+    }
+
+    // Data
+    if (data.date !== undefined && !validator.isISO8601(data.date)) {
+      errors.push('Data deve ter formato válido (ISO 8601)');
+    }
+
+    // Hora
+    if (
+      data.time !== undefined &&
+      !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(data.time)
+    ) {
+      errors.push('Hora deve ter formato válido (HH:mm)');
+    }
+
+    // Local
+    if (data.location !== undefined) {
+      if (data.location.trim().length < 2) {
+        errors.push('Local do evento deve ter pelo menos 2 caracteres');
+      }
+      if (data.location.length > 200) {
+        errors.push('Local deve ter no máximo 200 caracteres');
+      }
+    }
+
+    // Observações
+    if (data.observations !== undefined && data.observations.length > 1000) {
+      errors.push('Observações devem ter no máximo 1000 caracteres');
+    }
+
+    // Status
+    const validStatuses = [
+      'agendado',
+      'em_andamento',
+      'concluido',
+      'cancelado',
+    ];
+    if (data.status !== undefined && !validStatuses.includes(data.status)) {
+      errors.push(
+        `Status deve ser um dos seguintes: ${validStatuses.join(', ')}`
       );
     }
 
@@ -309,5 +460,6 @@ module.exports = {
   userValidation,
   projectValidation,
   noticeValidation,
+  eventValidation,
   createValidationMiddleware,
 };

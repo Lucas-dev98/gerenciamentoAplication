@@ -80,7 +80,7 @@ db.createCollection('notices', {
           description: 'Content must be between 10-5000 characters',
         },
         type: {
-          enum: ['announcement', 'warning', 'info', 'urgent', 'reminder'],
+          enum: ['info', 'warning', 'urgent', 'announcement', 'maintenance'],
           description: 'Type must be one of the allowed notice types',
         },
       },
