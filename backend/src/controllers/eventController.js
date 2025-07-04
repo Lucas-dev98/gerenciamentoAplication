@@ -1,3 +1,21 @@
+/**
+ * Event Controller - Clean Architecture Implementation
+ *
+ * Controller responsável pelo gerenciamento de eventos seguindo
+ * os princípios de Clean Architecture e SOLID.
+ *
+ * Funcionalidades:
+ * - CRUD completo de eventos
+ * - Gestão de calendário
+ * - Notificações de eventos
+ * - Filtros por data e categoria
+ * - Validação de dados
+ *
+ * @version 3.0.0
+ * @architecture Clean Architecture
+ * @layer Interface/Controllers
+ */
+
 const Event = require('../models/Event');
 const logger = require('../utils/logger');
 

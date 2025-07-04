@@ -1,0 +1,216 @@
+[
+  {
+    "name": "Projeto de Teste CRUD",
+    "description": "Projeto criado para testar o sistema CRUD completo",
+    "status": "active",
+    "priority": "high",
+    "startDate": "2024-01-01T00:00:00.000Z",
+    "endDate": "2024-12-31T00:00:00.000Z",
+    "deadline": null,
+    "budget": 100000,
+    "tags": [],
+    "owner": "60d5ecb54b24a03d1c8b4567",
+    "_id": "1751419234411jt4tzfqr5",
+    "id": "1751419234411jt4tzfqr5",
+    "createdAt": "2025-07-02T01:20:34.411Z",
+    "updatedAt": "2025-07-02T01:20:34.411Z",
+    "team": [],
+    "progress": 0,
+    "isActive": true,
+    "isOverdue": true,
+    "estimatedDuration": "365 dias"
+  },
+  {
+    "name": "sample-project",
+    "description": "Projeto importado do arquivo CSV: sample-project.csv",
+    "status": "active",
+    "priority": "medium",
+    "startDate": "2025-07-02T01:20:34.438Z",
+    "endDate": null,
+    "deadline": null,
+    "budget": 0,
+    "tags": [
+      "csv-import"
+    ],
+    "owner": "60d5ecb54b24a03d1c8b4567",
+    "progress": 84.27,
+    "activities": [
+      {
+        "name": "Pátio de Alimentação",
+        "type": "partida",
+        "progress": 85.5,
+        "baseline": 90,
+        "subActivities": [
+          {
+            "name": "Montagem de Equipamentos",
+            "progress": 80,
+            "baseline": 85
+          },
+          {
+            "name": "Instalação de Tubulações",
+            "progress": 90,
+            "baseline": 95
+          }
+        ],
+        "order": 0
+      },
+      {
+        "name": "Secagem",
+        "type": "partida",
+        "progress": 75.2,
+        "baseline": 80,
+        "subActivities": [
+          {
+            "name": "Instalação de Resistências",
+            "progress": 70,
+            "baseline": 75
+          },
+          {
+            "name": "Testes de Funcionamento",
+            "progress": 80,
+            "baseline": 85
+          }
+        ],
+        "order": 1
+      },
+      {
+        "name": "Torre de Resfriamento",
+        "type": "partida",
+        "progress": 92.1,
+        "baseline": 95,
+        "subActivities": [
+          {
+            "name": "Montagem da Estrutura",
+            "progress": 95,
+            "baseline": 100
+          },
+          {
+            "name": "Instalação de Bombas",
+            "progress": 90,
+            "baseline": 95
+          }
+        ],
+        "order": 2
+      }
+    ],
+    "metadata": {
+      "csvImport": true,
+      "estatisticas": {
+        "totalAtividades": 3,
+        "atividadesCompletas": 0,
+        "progressoGeral": 84.27,
+        "progressoPorBloco": {
+          "parada": {
+            "total": 0,
+            "completas": 0,
+            "progresso": 0
+          },
+          "manutencao": {
+            "total": 0,
+            "completas": 0,
+            "progresso": 0
+          },
+          "partida": {
+            "total": 3,
+            "completas": 0,
+            "progresso": 84.27
+          }
+        }
+      },
+      "blocos": {
+        "parada": 0,
+        "manutencao": 0,
+        "partida": 3
+      },
+      "processedAt": "2025-07-02T01:20:34.438Z"
+    },
+    "_id": "1751419234439yfh200esg",
+    "id": "1751419234439yfh200esg",
+    "createdAt": "2025-07-02T01:20:34.439Z",
+    "updatedAt": "2025-07-02T01:20:34.439Z",
+    "team": [],
+    "isActive": true,
+    "isOverdue": false,
+    "estimatedDuration": null
+  },
+  {
+    "name": "Projeto Teste Integração",
+    "description": "Projeto criado para testar integração frontend-backend",
+    "status": "active",
+    "priority": "medium",
+    "startDate": "2025-07-04T11:40:57.707Z",
+    "budget": 50000,
+    "owner": "6867bdc9b6890d091ad08ad2",
+    "createdBy": "6867bdc9b6890d091ad08ad2",
+    "progress": 0,
+    "createdAt": "2025-07-04T11:40:57.714Z",
+    "updatedAt": "2025-07-04T11:40:57.714Z",
+    "id": "1751629257714msa2jcas0",
+    "_id": "1751629257714msa2jcas0",
+    "team": [],
+    "tags": [],
+    "isActive": true,
+    "isOverdue": false,
+    "estimatedDuration": null
+  },
+  {
+    "name": "Projeto Teste Integração",
+    "description": "Projeto criado para testar integração frontend-backend",
+    "status": "active",
+    "priority": "medium",
+    "startDate": "2025-07-04T11:45:08.333Z",
+    "budget": 50000,
+    "owner": "6867bdc9b6890d091ad08ad2",
+    "createdBy": "6867bdc9b6890d091ad08ad2",
+    "progress": 0,
+    "createdAt": "2025-07-04T11:45:08.348Z",
+    "updatedAt": "2025-07-04T11:45:08.348Z",
+    "id": "1751629508348ht7yp6700",
+    "_id": "1751629508348ht7yp6700",
+    "team": [],
+    "tags": [],
+    "isActive": true,
+    "isOverdue": false,
+    "estimatedDuration": null
+  },
+  {
+    "name": "Projeto Teste Integração",
+    "description": "Projeto criado para testar integração frontend-backend",
+    "status": "active",
+    "priority": "medium",
+    "startDate": "2025-07-04T11:59:00.340Z",
+    "budget": 50000,
+    "owner": "6867bdc9b6890d091ad08ad2",
+    "createdBy": "6867bdc9b6890d091ad08ad2",
+    "progress": 0,
+    "createdAt": "2025-07-04T11:59:00.343Z",
+    "updatedAt": "2025-07-04T11:59:00.343Z",
+    "id": "17516303403439wp4n0tbb",
+    "_id": "17516303403439wp4n0tbb",
+    "team": [],
+    "tags": [],
+    "isActive": true,
+    "isOverdue": false,
+    "estimatedDuration": null
+  },
+  {
+    "name": "Projeto Teste Integração",
+    "description": "Projeto criado para testar integração frontend-backend",
+    "status": "active",
+    "priority": "medium",
+    "startDate": "2025-07-04T12:00:59.530Z",
+    "budget": 50000,
+    "owner": "6867bdc9b6890d091ad08ad2",
+    "createdBy": "6867bdc9b6890d091ad08ad2",
+    "progress": 0,
+    "createdAt": "2025-07-04T12:00:59.534Z",
+    "updatedAt": "2025-07-04T12:00:59.534Z",
+    "id": "project_1751630459534_jkzxocyf8",
+    "_id": "1751630459534ouli5moos",
+    "team": [],
+    "tags": [],
+    "isActive": true,
+    "isOverdue": false,
+    "estimatedDuration": null
+  }
+]

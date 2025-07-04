@@ -86,6 +86,19 @@ const upload = multer({
 // Middleware para upload de CSV de projeto
 const uploadProjectCSV = upload.single('csvFile');
 
+// Middleware para upload de CSV com metadados (aceita campos adicionais)
+const uploadProjectCSVWithMetadata = upload.fields([
+  { name: 'csvFile', maxCount: 1 },
+  { name: 'name', maxCount: 1 },
+  { name: 'description', maxCount: 1 },
+  { name: 'type', maxCount: 1 },
+  { name: 'priority', maxCount: 1 },
+  { name: 'assignedTo', maxCount: 1 },
+  { name: 'startDate', maxCount: 1 },
+  { name: 'endDate', maxCount: 1 },
+  { name: 'tags', maxCount: 1 },
+]);
+
 // Middleware de tratamento de erros de upload
 const handleUploadError = (error, req, res, next) => {
   logger.error('Erro no upload de arquivo', {
@@ -173,8 +186,52 @@ const uploadCSVMiddleware = (req, res, next) => {
   });
 };
 
+// Middleware combinado para upload com metadados
+const uploadCSVWithMetadataMiddleware = (req, res, next) => {
+  uploadProjectCSVWithMetadata(req, res, (error) => {
+    if (error) {
+      return handleUploadError(error, req, res, next);
+    }
+
+    // Normalizar para o formato esperado pelo controller
+    if (req.files && req.files.csvFile && req.files.csvFile[0]) {
+      req.file = req.files.csvFile[0];
+
+      // Adicionar metadados ao req.body se necessário
+      if (req.body) {
+        req.projectMetadata = {
+          name: req.body.name,
+          description: req.body.description,
+          type: req.body.type,
+          priority: req.body.priority,
+          assignedTo: req.body.assignedTo,
+          startDate: req.body.startDate,
+          endDate: req.body.endDate,
+          tags: req.body.tags ? req.body.tags.split(',') : undefined,
+        };
+      }
+    }
+
+    logger.info('Arquivo uploaded com metadados', {
+      fileName: req.file?.originalname,
+      size: req.file?.size,
+      metadata: req.projectMetadata,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    next();
+  });
+};
+
 module.exports = {
   uploadCSVMiddleware,
+  uploadCSVWithMetadataMiddleware,
   uploadProjectCSV,
+  uploadProjectCSVWithMetadata,
   handleUploadError,
+  single: upload.single.bind(upload),
+  any: upload.any.bind(upload),
+  array: upload.array.bind(upload),
+  fields: upload.fields.bind(upload),
+  none: upload.none.bind(upload),
 };

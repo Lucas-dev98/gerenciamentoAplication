@@ -1,71 +1,155 @@
+/**
+ * Project Routes - Single Responsibility Route Handler
+ *
+ * Responsabilidade única: Definir rotas HTTP para projetos
+ * - Mapeamento de URLs para actions do controller
+ * - Aplicação de middlewares específicos
+ * - Validação de parâmetros de rota
+ *
+ * @version 4.0.0
+ * @architecture Clean Architecture - Interface Layer
+ */
+
 const express = require('express');
-const {
-  createProject,
-  getAllProjects,
-  getProjectById,
-  updateProject,
-  deleteProject,
-  getProjectsByUser,
-  addTeamMember,
-  removeTeamMember,
-  uploadProjectFromCSV,
-  updateProjectFromCSV,
-  // Novas funcionalidades baseadas no Flask
-  getProcedimentoParada,
-  getManutencao,
-  getProcedimentoPartida,
-  getAllFrentes,
-} = require('../controllers/projectController');
-const authMiddleware = require('../middlewares/authMiddleware');
-const { uploadCSVMiddleware } = require('../middlewares/uploadMiddleware');
-const { apiLimiter, strictLimiter } = require('../middlewares/rateLimiter');
-const {
-  projectValidation,
-  createValidationMiddleware,
-} = require('../middlewares/validation');
-
 const router = express.Router();
+const authMiddleware = require('../middlewares/authMiddleware');
+const uploadMiddleware = require('../middlewares/uploadMiddleware');
+const projectController = require('../controllers/ProjectController');
+const logger = require('../utils/logger');
 
-// Apply authentication middleware to all routes
+console.log('📂 Project routes loading...');
+
+// Middleware de autenticação obrigatório para TODAS as rotas
 router.use(authMiddleware);
 
-// Apply rate limiting
-router.use(apiLimiter);
+// === ROTAS PRINCIPAIS ===
 
-// Rotas CRUD básicas para projetos
+/**
+ * GET /api/projects - Listar todos os projetos
+ */
+router.get('/', projectController.getAllProjects.bind(projectController));
+
+/**
+ * GET /api/projects/statistics - Project statistics (must come before /:id routes)
+ */
+router.get(
+  '/statistics',
+  projectController.getProjectStatistics.bind(projectController)
+);
+
+/**
+ * GET /api/projects/:id - Buscar projeto por ID
+ */
+router.get('/:id', projectController.getProjectById.bind(projectController));
+
+/**
+ * POST /api/projects - Criar novo projeto
+ */
+router.post('/', projectController.createProject.bind(projectController));
+
+/**
+ * PUT /api/projects/:id - Atualizar projeto
+ */
+router.put('/:id', projectController.updateProject.bind(projectController));
+
+/**
+ * DELETE /api/projects/:id - Remover projeto
+ */
+router.delete('/:id', projectController.deleteProject.bind(projectController));
+
+// === ROTAS ESPECIALIZADAS ===
+
+/**
+ * POST /api/projects/upload-csv - Upload de arquivo CSV
+ */
 router.post(
-  '/',
-  uploadCSVMiddleware,
-  createValidationMiddleware(projectValidation, 'create'),
-  createProject
-); // Criar projeto
-router.get('/', getAllProjects); // Listar todos os projetos
-router.get('/:id', getProjectById); // Obter projeto por ID
+  '/upload-csv',
+  uploadMiddleware.uploadCSVWithMetadataMiddleware,
+  projectController.uploadCSV.bind(projectController)
+);
+
+/**
+ * POST /api/projects/import-csv - Alias for upload-csv (frontend compatibility)
+ */
+router.post(
+  '/import-csv',
+  uploadMiddleware.uploadCSVWithMetadataMiddleware,
+  projectController.uploadCSV.bind(projectController)
+);
+
+/**
+ * GET /api/projects/:id/export-csv - Exportar projeto em CSV
+ */
+router.get(
+  '/:id/export-csv',
+  projectController.exportCSV.bind(projectController)
+);
+
+/**
+ * GET /api/projects/:id/dashboard - Dados do dashboard
+ */
+router.get(
+  '/:id/dashboard',
+  projectController.getProjectDashboard.bind(projectController)
+);
+
+/**
+ * GET /api/projects/:id/frentes - Frentes do projeto
+ */
+router.get(
+  '/:id/frentes',
+  projectController.getProjectFrentes.bind(projectController)
+);
+
+/**
+ * PUT /api/projects/:id/frentes/:frenteId - Atualizar frente
+ */
 router.put(
+  '/:id/frentes/:frenteId',
+  projectController.updateProjectFrente.bind(projectController)
+);
+
+// === FRONTEND COMPATIBILITY ALIASES ===
+// Create a separate CRUD router for /api/projects-crud endpoints
+const crudRouter = express.Router();
+
+// Apply auth middleware to CRUD routes as well
+crudRouter.use(authMiddleware);
+
+// CRUD aliases - map to the same controller methods
+crudRouter.get('/', projectController.getAllProjects.bind(projectController));
+
+// Statistics routes must come before /:id to avoid being caught as an ID
+crudRouter.get(
+  '/stats',
+  projectController.getProjectStatistics.bind(projectController)
+);
+
+crudRouter.get(
+  '/statistics',
+  projectController.getProjectStatistics.bind(projectController)
+);
+
+crudRouter.get(
   '/:id',
-  createValidationMiddleware(projectValidation, 'update'),
-  updateProject
-); // Atualizar projeto
-router.delete('/:id', strictLimiter, deleteProject); // Deletar projeto
+  projectController.getProjectById.bind(projectController)
+);
+crudRouter.post('/', projectController.createProject.bind(projectController));
+crudRouter.put('/:id', projectController.updateProject.bind(projectController));
+crudRouter.delete(
+  '/:id',
+  projectController.deleteProject.bind(projectController)
+);
 
-// Rotas específicas para gerenciamento de usuários
-router.get('/user/:userId', getProjectsByUser); // Projetos de um usuário específico
+// CSV import alias for CRUD route
+crudRouter.post(
+  '/import-csv',
+  uploadMiddleware.uploadCSVWithMetadataMiddleware,
+  projectController.uploadCSV.bind(projectController)
+);
 
-// Rotas para gerenciamento de equipe
-router.post('/:id/team', addTeamMember); // Adicionar membro à equipe
-router.delete('/:id/team/:userId', removeTeamMember); // Remover membro da equipe
+console.log('✅ Project routes loaded successfully');
 
-// Rota para upload de projeto via CSV
-router.post('/upload-csv', uploadCSVMiddleware, uploadProjectFromCSV);
-
-// Rota para atualizar projeto existente com novo CSV
-router.put('/:id/update-csv', uploadCSVMiddleware, updateProjectFromCSV);
-
-// NOVAS ROTAS BASEADAS NO FLASK app.py
-// Replicar exatamente as rotas do Flask
-router.get('/api/procedimento_parada', getProcedimentoParada); // /api/procedimento_parada
-router.get('/api/manutencao', getManutencao); // /api/manutencao
-router.get('/api/procedimento_partida', getProcedimentoPartida); // /api/procedimento_partida
-router.get('/api/frentes', getAllFrentes); // Nova rota para todas as frentes
-
+// Export both routers
 module.exports = router;
+module.exports.crudRouter = crudRouter;

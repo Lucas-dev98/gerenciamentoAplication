@@ -16,8 +16,8 @@ const mockUsers = new Map();
 
 // Verificar se deve usar modo mock (sem banco)
 const useMockMode = () => {
-  // Usar MongoDB se DB_URI estiver configurada e não estiver em modo mock explícito
-  return !process.env.DB_URI || process.env.NODE_ENV === 'development-mock';
+  // Sempre usar MongoDB - nunca usar mock
+  return false;
 };
 
 const register = async ({ username, email, password, fullName, phone }) => {
@@ -318,6 +318,39 @@ const updateUser = async (id, updateData) => {
   }
 };
 
+const deleteUser = async (id) => {
+  try {
+    // Modo mock para desenvolvimento sem banco
+    if (useMockMode()) {
+      logger.info(
+        '🔧 Usando modo desenvolvimento (sem banco) - Excluindo usuário',
+        { id }
+      );
+      const user = mockUsers.get(id);
+      if (!user) {
+        return null;
+      }
+
+      mockUsers.delete(id);
+      logger.info(`User ${user.username} deleted successfully (mock)`);
+      return user;
+    }
+
+    // Modo normal com banco
+    const user = await User.findByIdAndDelete(id);
+    if (user) {
+      logger.info(`User ${user.username} deleted successfully`);
+    }
+    return user;
+  } catch (error) {
+    logger.error('Erro ao excluir usuário', {
+      error: error.message,
+      id,
+    });
+    throw error;
+  }
+};
+
 // Gerar token JWT
 const generateToken = (userId, email, username) => {
   const payload = {
@@ -343,5 +376,6 @@ module.exports = {
   getAllUsers,
   getUserById,
   updateUser,
+  deleteUser,
   generateToken,
 };

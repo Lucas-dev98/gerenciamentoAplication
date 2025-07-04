@@ -1,5 +1,40 @@
+/**
+ * Authentication Controller - Clean Architecture Implementation
+ *
+ * Controller responsável pela autenticação e autorização de usuários
+ * seguindo os princípios de Clean Architecture e SOLID.
+ *
+ * Funcionalidades:
+ * - Login e logout de usuários
+ * - Registro de novos usuários
+ * - Validação de tokens JWT
+ * - Gestão de sessões
+ * - Validação de dados de entrada
+ *
+ * @version 3.0.0
+ * @architecture Clean Architecture
+ * @layer Interface/Controllers
+ */
+
 const authService = require('../services/authServices');
 const logger = require('../utils/logger');
+const validator = require('validator');
+
+// Função para sanitizar dados de entrada
+const sanitizeInput = (data) => {
+  const sanitized = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === 'string') {
+      // Escapar HTML e remover caracteres potencialmente perigosos
+      sanitized[key] = validator.escape(value.trim());
+    } else {
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+};
 
 // Validação de dados de entrada
 const validateRegisterData = (username, email, password) => {
@@ -22,7 +57,9 @@ const validateRegisterData = (username, email, password) => {
 
 const register = async (req, res, next) => {
   try {
-    const { username, email, password, fullName, phone } = req.body;
+    // Sanitizar dados de entrada
+    const sanitizedData = sanitizeInput(req.body);
+    const { username, email, password, fullName, phone } = sanitizedData;
 
     // Log da tentativa de registro
     logger.debug('Tentativa de registro de usuário', {
@@ -30,6 +67,8 @@ const register = async (req, res, next) => {
       email,
       fullName,
       phone: phone ? '[REDACTED]' : undefined,
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
     });
 
     // Validar dados obrigatórios
@@ -108,9 +147,15 @@ const register = async (req, res, next) => {
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    // Sanitizar dados de entrada
+    const sanitizedData = sanitizeInput(req.body);
+    const { email, password } = sanitizedData;
 
-    logger.debug('Tentativa de login', { email });
+    logger.debug('Tentativa de login', {
+      email,
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
 
     if (!email || !password) {
       logger.warn('Tentativa de login com dados incompletos', {
@@ -193,6 +238,65 @@ const getAllUsers = async (req, res, next) => {
       stack: error.stack,
     });
     next(error);
+  }
+};
+
+// Verificar token JWT
+const verifyToken = async (req, res) => {
+  try {
+    logger.debug('Token verification request', { userId: req.user.id });
+
+    // Se chegou até aqui, o token é válido (passou pelo authMiddleware)
+    const user = await authService.getUserById(req.user.id);
+
+    if (!user) {
+      logger.warn('User not found during token verification', {
+        userId: req.user.id,
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Usuário não encontrado',
+        valid: false,
+      });
+    }
+
+    logger.info('Token verification successful', {
+      userId: req.user.id,
+      username: user.username,
+    });
+
+    res.json({
+      success: true,
+      message: 'Token válido',
+      valid: true,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        isActive: user.isActive,
+      },
+      tokenInfo: {
+        issuedAt: req.user.iat ? new Date(req.user.iat * 1000) : null,
+        expiresAt: req.user.exp ? new Date(req.user.exp * 1000) : null,
+        timeToExpiry: req.user.exp
+          ? req.user.exp - Math.floor(Date.now() / 1000)
+          : null,
+      },
+    });
+  } catch (error) {
+    logger.error('Error in token verification', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      valid: false,
+    });
   }
 };
 
@@ -324,4 +428,66 @@ const updateUser = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getAllUsers, getUserById, updateUser };
+const deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    logger.debug('Tentativa de exclusão de usuário', { userId: id });
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do usuário é obrigatório',
+        details: { providedId: id },
+      });
+    }
+
+    const deletedUser = await authService.deleteUser(id);
+
+    if (!deletedUser) {
+      logger.warn('Tentativa de excluir usuário inexistente', { userId: id });
+
+      return res.status(404).json({
+        success: false,
+        message: 'Usuário não encontrado para exclusão',
+        details: {
+          searchedId: id,
+          suggestion: 'Verifique se o ID está correto',
+        },
+      });
+    }
+
+    logger.info(
+      `Usuário excluído com sucesso: ${deletedUser.username} (ID: ${id})`
+    );
+
+    res.json({
+      success: true,
+      message: 'Usuário excluído com sucesso',
+      user: {
+        id: deletedUser._id,
+        username: deletedUser.username,
+        email: deletedUser.email,
+        fullName: deletedUser.fullName,
+        deletedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.error('Erro ao excluir usuário', {
+      error: error.message,
+      userId: req.params.id,
+      stack: error.stack,
+    });
+    next(error);
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  getAllUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
+  verifyToken,
+};

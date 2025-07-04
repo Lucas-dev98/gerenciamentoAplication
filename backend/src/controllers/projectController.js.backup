@@ -1,0 +1,1647 @@
+/**
+ * Project Controller - Single Responsibility HTTP Handler
+ * 
+ * Responsabilidade única: Gerenciar requisições HTTP para projetos
+ * - Validação de entrada
+ * - Transformação de dados HTTP
+ * - Delegação para services
+ * - Formatação de respostas
+ * 
+ * @version 4.0.0
+ * @architecture Clean Architecture - Interface Layer
+ */
+
+const projectService = require('../services/ProjectService');
+const logger = require('../utils/logger');
+const fs = require('fs');
+const csv = require('csv-parser');
+const chardet = require('chardet');
+
+// FUNÇÕES DE PROCESSAMENTO CSV BASEADAS NOS SCRIPTS PYTHON
+
+// Função para processar frentes (baseada em data.py)
+const processarFrentesCSV = (caminhoArquivo) => {
+  return new Promise((resolve, reject) => {
+    const atividades = [];
+    let atividadeAtual = null;
+
+    // Detecta a codificação do arquivo
+    const buffer = fs.readFileSync(caminhoArquivo);
+    const encodingDetected = chardet.detect(buffer);
+    logger.info(`Codificação detectada: ${encodingDetected}`);
+
+    // Mapear encodings para Node.js
+    let encoding = 'latin1';
+    if (encodingDetected) {
+      const normalizedEncoding = encodingDetected.toLowerCase();
+      if (
+        normalizedEncoding.includes('utf-8') ||
+        normalizedEncoding.includes('utf8')
+      ) {
+        encoding = 'utf8';
+      } else if (
+        normalizedEncoding.includes('iso-8859-1') ||
+        normalizedEncoding.includes('latin1')
+      ) {
+        encoding = 'latin1';
+      }
+    }
+
+    fs.createReadStream(caminhoArquivo, { encoding })
+      .pipe(csv({ separator: ';' }))
+      .on('data', (linha) => {
+        const nome = linha['Nome'] || '';
+        const nivel =
+          linha['Nível_da_estrutura_de_tópicos'] ||
+          linha['N�vel_da_estrutura_de_t�picos'] ||
+          '';
+        const dashboard = linha['Dashboard'] || '';
+        const percentReal = linha['Porcentagem_Prev_Real'] || '';
+        const percentLB = linha['Porcentagem_Prev_LB'] || '';
+
+        if (nivel === '3') {
+          // Atividade principal
+          if (atividadeAtual && atividadeAtual.sub_activities.length > 0) {
+            atividades.push(atividadeAtual);
+          }
+
+          atividadeAtual = {
+            name: nome,
+            value: percentReal,
+            baseline: percentLB,
+            sub_activities: [],
+          };
+        } else if (nivel === '4' && atividadeAtual && dashboard === 'S') {
+          // Subatividade com Dashboard S - ORDEM: Real|Planejado
+          const subatividade = `${nome}:${percentReal}|${percentLB}`;
+          atividadeAtual.sub_activities.push(subatividade);
+        }
+      })
+      .on('end', () => {
+        // Adiciona última atividade se tiver subatividades
+        if (atividadeAtual && atividadeAtual.sub_activities.length > 0) {
+          atividades.push(atividadeAtual);
+        }
+        resolve(atividades);
+      })
+      .on('error', reject);
+  });
+};
+
+// Função para aplicar formatação (baseada em format.py)
+const aplicarFormatacaoCSV = (atividades) => {
+  const aplicarFormatacao = (texto) => {
+    if (!texto) return texto;
+
+    let textoFormatado = texto;
+
+    // 1. Substitui os `;` dentro de parênteses por espaços
+    textoFormatado = textoFormatado.replace(
+      /\(([^()]+?)\)/g,
+      (match, content) => {
+        return `(${content.replace(/;/g, ' ')})`;
+      }
+    );
+
+    // 2. Remove o `;` após padrões como (BH129)
+    textoFormatado = textoFormatado.replace(/\((BH\d+)\);/g, '$1');
+
+    // 3. Substitui o `;` por espaço em padrões como BH128; BH129; BH130
+    textoFormatado = textoFormatado.replace(/(BH\d+);/g, '$1 ');
+
+    // 4. Remove todos os parênteses
+    textoFormatado = textoFormatado.replace(/[()]/g, '');
+
+    // 5. Remove os caracteres `/`, `\`
+    textoFormatado = textoFormatado.replace(/[\\/]/g, '');
+
+    // 6. Remove a palavra "disponível"
+    textoFormatado = textoFormatado.replace(/disponível/g, '');
+
+    return textoFormatado.trim();
+  };
+
+  return atividades.map((atividade) => ({
+    ...atividade,
+    name: aplicarFormatacao(atividade.name),
+    sub_activities: atividade.sub_activities.map((sub) => {
+      const [nome, valores] = sub.split(':');
+      const nomeFormatado = aplicarFormatacao(nome);
+      return `${nomeFormatado}:${valores}`;
+    }),
+  }));
+};
+
+// Função para desempilhar em blocos (baseada em desempilhar_csv.py)
+const desempilharCSVEmBlocos = (atividades) => {
+  // Cria pilha principal
+  const pilhaPrincipal = [...atividades];
+
+  // Três pilhas auxiliares
+  const pilhaAuxParada = [];
+  const pilhaAuxManutencao = [];
+  const pilhaAuxPartida = [];
+
+  let cont = 0;
+
+  while (pilhaPrincipal.length > 0 && cont < 3) {
+    const linha = pilhaPrincipal.pop();
+
+    if (cont === 0) {
+      pilhaAuxParada.push(linha);
+    } else if (cont === 1) {
+      pilhaAuxManutencao.push(linha);
+    } else if (cont === 2) {
+      pilhaAuxPartida.push(linha);
+    }
+
+    // Muda de bloco quando encontra "Pátio de Alimentação"
+    if (linha.name.trim() === 'Pátio de Alimentação') {
+      cont++;
+    }
+  }
+
+  // Retorna os blocos (conforme script Python)
+  return {
+    parada: pilhaAuxPartida.reverse(), // pilha_aux_partida -> procedimento_parada
+    manutencao: pilhaAuxManutencao.reverse(), // pilha_aux_manutencao -> manutencao
+    partida: pilhaAuxParada.reverse(), // pilha_aux_parada -> procedimento_partida
+  };
+};
+
+// Função para calcular estatísticas
+const calcularEstatisticasCSV = (blocos) => {
+  const normalizarValor = (valor) => {
+    if (!valor || valor === '') return 0;
+    const num = parseFloat(valor.toString().replace('%', '').replace(',', '.'));
+    return isNaN(num) ? 0 : num;
+  };
+
+  const stats = {
+    totalAtividades: 0,
+    atividadesCompletas: 0,
+    progressoGeral: 0,
+    progressoPorBloco: {},
+  };
+
+  Object.keys(blocos).forEach((nomeBloco) => {
+    const atividades = blocos[nomeBloco];
+    let totalProgress = 0;
+    let completedCount = 0;
+
+    atividades.forEach((atividade) => {
+      const progress = normalizarValor(atividade.value);
+      totalProgress += progress;
+
+      if (progress >= 100) {
+        completedCount++;
+      }
+    });
+
+    const avgProgress =
+      atividades.length > 0 ? totalProgress / atividades.length : 0;
+
+    stats.progressoPorBloco[nomeBloco] = {
+      total: atividades.length,
+      completas: completedCount,
+      progresso: Math.round(avgProgress * 100) / 100,
+    };
+
+    stats.totalAtividades += atividades.length;
+    stats.atividadesCompletas += completedCount;
+  });
+
+  // Calcula progresso geral
+  const totalProgress = Object.values(stats.progressoPorBloco).reduce(
+    (sum, bloco) => sum + bloco.progresso * bloco.total,
+    0
+  );
+
+  stats.progressoGeral =
+    stats.totalAtividades > 0
+      ? Math.round((totalProgress / stats.totalAtividades) * 100) / 100
+      : 0;
+
+  return stats;
+};
+
+// Validação de dados de entrada para criação de projeto
+const validateProjectData = (name, description) => {
+  const errors = [];
+
+  if (!name || name.trim().length < 3) {
+    errors.push('Nome do projeto deve ter pelo menos 3 caracteres');
+  }
+
+  if (description && description.length > 500) {
+    errors.push('Descrição deve ter no máximo 500 caracteres');
+  }
+
+  return errors;
+};
+
+const createProject = async (req, res, next) => {
+  const action = 'CREATE_PROJECT';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Starting project creation`, {
+      userId: req.user?.id || 'anonymous',
+      body: { ...req.body, sensitive: 'redacted' },
+    });
+
+    const {
+      name,
+      description,
+      status,
+      priority,
+      startDate,
+      endDate,
+      deadline,
+      budget,
+      tags,
+    } = req.body;
+
+    // Validar dados obrigatórios
+    const validationErrors = validateProjectData(name, description);
+    if (validationErrors.length > 0) {
+      logger.warn(`${action}: Validation failed`, {
+        errors: validationErrors,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Dados de entrada inválidos',
+        details: validationErrors,
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Por enquanto, usar um owner fixo (em produção viria do token JWT)
+    const projectData = {
+      name: name.trim(),
+      description: description?.trim(),
+      status: status || 'planning',
+      priority: priority || 'medium',
+      startDate: startDate ? new Date(startDate) : new Date(),
+      endDate: endDate ? new Date(endDate) : null,
+      deadline: deadline ? new Date(deadline) : null,
+      budget: budget || 0,
+      tags: tags || [],
+      owner: req.user?.id || '60d5ecb54b24a03d1c8b4567', // ID fictício para teste
+    };
+
+    const project = await projectService.createProject(projectData);
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Project created successfully`, {
+      projectId: project._id,
+      projectName: project.name,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Projeto criado com sucesso',
+      data: {
+        project: {
+          id: project._id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          deadline: project.deadline,
+          budget: project.budget,
+          tags: project.tags,
+          progress: project.progress,
+          createdAt: project.createdAt,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed to create project`, {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+const getAllProjects = async (req, res, next) => {
+  const action = 'GET_ALL_PROJECTS';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Starting projects retrieval`, {
+      query: req.query,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const { status, priority, owner, isActive } = req.query;
+
+    const filters = {};
+    if (status) filters.status = status;
+    if (priority) filters.priority = priority;
+    if (owner) filters.owner = owner;
+    if (isActive !== undefined) filters.isActive = isActive === 'true';
+
+    const projects = await projectService.getAllProjects(filters);
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Projects retrieved successfully`, {
+      count: projects.length,
+      filters,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Projetos listados com sucesso',
+      data: {
+        count: projects.length,
+        projects: projects.map((project) => ({
+          id: project._id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          deadline: project.deadline,
+          budget: project.budget,
+          progress: project.progress,
+          isOverdue: project.isOverdue,
+          estimatedDuration: project.estimatedDuration,
+          owner: project.owner,
+          teamSize: project.team.length,
+          tags: project.tags,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        })),
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed to retrieve projects`, {
+      error: error.message,
+      stack: error.stack,
+      query: req.query,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+const getProjectById = async (req, res, next) => {
+  const action = 'GET_PROJECT_BY_ID';
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+
+    logger.info(`${action}: Starting project retrieval`, {
+      projectId: id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.getProjectById(id);
+
+    if (!project) {
+      logger.warn(`${action}: Project not found`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: [`Projeto com ID ${id} não foi encontrado`],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Project retrieved successfully`, {
+      projectId: project._id,
+      projectName: project.name,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Projeto encontrado',
+      data: {
+        project: {
+          id: project._id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          deadline: project.deadline,
+          budget: project.budget,
+          progress: project.progress,
+          isOverdue: project.isOverdue,
+          estimatedDuration: project.estimatedDuration,
+          owner: project.owner,
+          team: project.team,
+          tags: project.tags,
+          isActive: project.isActive,
+          // Adicionar activities e metadata que estavam faltando
+          activities: project.activities || [],
+          metadata: project.metadata || {},
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed to retrieve project`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+const updateProject = async (req, res, next) => {
+  const action = 'UPDATE_PROJECT';
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    logger.info(`${action}: Starting project update`, {
+      projectId: id,
+      updateFields: Object.keys(updateData),
+      userId: req.user?.id || 'anonymous',
+    });
+
+    // Validar dados se nome estiver sendo atualizado
+    if (updateData.name) {
+      const validationErrors = validateProjectData(
+        updateData.name,
+        updateData.description
+      );
+      if (validationErrors.length > 0) {
+        logger.warn(`${action}: Validation failed`, {
+          errors: validationErrors,
+          projectId: id,
+          userId: req.user?.id || 'anonymous',
+        });
+
+        return res.status(400).json({
+          status: 'error',
+          type: 'VALIDATION_ERROR',
+          message: 'Dados de entrada inválidos',
+          details: validationErrors,
+          timestamp: new Date().toISOString(),
+          requestId: req.id,
+        });
+      }
+    }
+
+    const updatedProject = await projectService.updateProject(id, updateData);
+
+    if (!updatedProject) {
+      logger.warn(`${action}: Project not found for update`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: [`Projeto com ID ${id} não foi encontrado para atualização`],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Project updated successfully`, {
+      projectId: updatedProject._id,
+      projectName: updatedProject.name,
+      updatedFields: Object.keys(updateData),
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Projeto atualizado com sucesso',
+      data: {
+        project: {
+          id: updatedProject._id,
+          name: updatedProject.name,
+          description: updatedProject.description,
+          status: updatedProject.status,
+          priority: updatedProject.priority,
+          startDate: updatedProject.startDate,
+          endDate: updatedProject.endDate,
+          deadline: updatedProject.deadline,
+          budget: updatedProject.budget,
+          progress: updatedProject.progress,
+          isOverdue: updatedProject.isOverdue,
+          estimatedDuration: updatedProject.estimatedDuration,
+          owner: updatedProject.owner,
+          team: updatedProject.team,
+          tags: updatedProject.tags,
+          isActive: updatedProject.isActive,
+          updatedAt: updatedProject.updatedAt,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed to update project`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      updateData: Object.keys(req.body),
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+const deleteProject = async (req, res, next) => {
+  const action = 'DELETE_PROJECT';
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+
+    logger.info(`${action}: Starting project deletion`, {
+      projectId: id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const deletedProject = await projectService.deleteProject(id);
+
+    if (!deletedProject) {
+      logger.warn(`${action}: Project not found for deletion`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: [`Projeto com ID ${id} não foi encontrado para exclusão`],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Project deleted successfully`, {
+      projectId: deletedProject._id,
+      projectName: deletedProject.name,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Projeto deletado com sucesso',
+      data: {
+        project: {
+          id: deletedProject._id,
+          name: deletedProject.name,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed to delete project`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+const getProjectsByUser = async (req, res, next) => {
+  const action = 'GET_PROJECTS_BY_USER';
+  const startTime = Date.now();
+
+  try {
+    const { userId } = req.params;
+
+    logger.info(`${action}: Starting user projects retrieval`, {
+      targetUserId: userId,
+      requestUserId: req.user?.id || 'anonymous',
+    });
+
+    const projects = await projectService.getProjectsByUser(userId);
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: User projects retrieved successfully`, {
+      targetUserId: userId,
+      count: projects.length,
+      requestUserId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Projetos do usuário listados com sucesso',
+      data: {
+        count: projects.length,
+        projects: projects.map((project) => ({
+          id: project._id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
+          progress: project.progress,
+          isOverdue: project.isOverdue,
+          role:
+            project.team.find((member) => member.user._id.toString() === userId)
+              ?.role || 'owner',
+          createdAt: project.createdAt,
+        })),
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed to retrieve user projects`, {
+      error: error.message,
+      stack: error.stack,
+      targetUserId: req.params.userId,
+      requestUserId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+const addTeamMember = async (req, res, next) => {
+  const action = 'ADD_TEAM_MEMBER';
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+    const { userId, role } = req.body;
+
+    logger.info(`${action}: Starting team member addition`, {
+      projectId: id,
+      newMemberUserId: userId,
+      role: role || 'developer',
+      requestUserId: req.user?.id || 'anonymous',
+    });
+
+    if (!userId) {
+      logger.warn(`${action}: Missing required userId`, {
+        projectId: id,
+        requestUserId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'ID do usuário é obrigatório',
+        details: [
+          'O campo userId é obrigatório para adicionar um membro à equipe',
+        ],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const project = await projectService.addTeamMember(id, userId, role);
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Team member added successfully`, {
+      projectId: project._id,
+      projectName: project.name,
+      newMemberUserId: userId,
+      role: role || 'developer',
+      teamSize: project.team.length,
+      requestUserId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Membro adicionado à equipe com sucesso',
+      data: {
+        project: {
+          id: project._id,
+          name: project.name,
+          teamSize: project.team.length,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    if (error.message === 'Project not found') {
+      logger.warn(`${action}: Project not found`, {
+        projectId: req.params.id,
+        requestUserId: req.user?.id || 'anonymous',
+        duration: `${duration}ms`,
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: [`Projeto com ID ${req.params.id} não foi encontrado`],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    if (error.message === 'User is already a team member') {
+      logger.warn(`${action}: User already in team`, {
+        projectId: req.params.id,
+        userId: req.body.userId,
+        requestUserId: req.user?.id || 'anonymous',
+        duration: `${duration}ms`,
+      });
+
+      return res.status(409).json({
+        status: 'error',
+        type: 'CONFLICT',
+        message: 'Usuário já é membro da equipe',
+        details: ['O usuário já está na equipe deste projeto'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    logger.error(`${action}: Failed to add team member`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.body.userId,
+      requestUserId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    next(error);
+  }
+};
+
+const removeTeamMember = async (req, res, next) => {
+  const action = 'REMOVE_TEAM_MEMBER';
+  const startTime = Date.now();
+
+  try {
+    const { id, userId } = req.params;
+
+    logger.info(`${action}: Starting team member removal`, {
+      projectId: id,
+      memberUserId: userId,
+      requestUserId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.removeTeamMember(id, userId);
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Team member removed successfully`, {
+      projectId: project._id,
+      projectName: project.name,
+      removedMemberUserId: userId,
+      teamSize: project.team.length,
+      requestUserId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Membro removido da equipe com sucesso',
+      data: {
+        project: {
+          id: project._id,
+          name: project.name,
+          teamSize: project.team.length,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    if (error.message === 'Project not found') {
+      logger.warn(`${action}: Project not found`, {
+        projectId: req.params.id,
+        requestUserId: req.user?.id || 'anonymous',
+        duration: `${duration}ms`,
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: [`Projeto com ID ${req.params.id} não foi encontrado`],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    logger.error(`${action}: Failed to remove team member`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.params.userId,
+      requestUserId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    next(error);
+  }
+};
+
+const uploadProjectFromCSV = async (req, res, next) => {
+  const action = 'UPLOAD_PROJECT_CSV';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Starting CSV project upload`, {
+      userId: req.user?.id || 'anonymous',
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+    });
+
+    // Validar se arquivo foi enviado
+    if (!req.file) {
+      logger.warn(`${action}: No file uploaded`, {
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Nenhum arquivo foi enviado',
+        details: ['É necessário enviar um arquivo CSV para processar'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Validar tipo de arquivo
+    if (!req.file.originalname.toLowerCase().endsWith('.csv')) {
+      logger.warn(`${action}: Invalid file type`, {
+        fileName: req.file.originalname,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Tipo de arquivo inválido',
+        details: ['Apenas arquivos CSV são aceitos'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const { projectName } = req.body;
+    const nomeProject =
+      projectName || req.file.originalname.replace('.csv', '');
+
+    // PROCESSAMENTO CSV IMPLEMENTANDO OS SCRIPTS PYTHON
+    // Etapa 1: Processar frentes (data.py)
+    const atividades = await processarFrentesCSV(req.file.path);
+    logger.info(`Etapa 1 concluída: ${atividades.length} atividades extraídas`);
+
+    // Etapa 2: Aplicar formatação (format.py)
+    const atividadesFormatadas = aplicarFormatacaoCSV(atividades);
+    logger.info('Etapa 2 concluída: formatação aplicada');
+
+    // Etapa 3: Desempilhar em blocos (desempilhar_csv.py)
+    const blocos = desempilharCSVEmBlocos(atividadesFormatadas);
+    logger.info('Etapa 3 concluída: blocos separados', {
+      parada: blocos.parada.length,
+      manutencao: blocos.manutencao.length,
+      partida: blocos.partida.length,
+    });
+
+    // Calcular estatísticas
+    const estatisticas = calcularEstatisticasCSV(blocos);
+
+    // Converter blocos para o formato de atividades do modelo
+    const activities = [];
+
+    // Processar bloco de parada
+    blocos.parada.forEach((atividade, index) => {
+      activities.push({
+        name: atividade.name,
+        type: 'parada',
+        progress: parseFloat(atividade.value?.replace(',', '.')) || 0,
+        baseline: parseFloat(atividade.baseline?.replace(',', '.')) || 0,
+        subActivities: atividade.sub_activities.map((sub) => {
+          const [nome, valores] = sub.split(':');
+          const [real, planejado] = valores.split('|');
+          return {
+            name: nome,
+            progress: parseFloat(real?.replace(',', '.')) || 0,
+            baseline: parseFloat(planejado?.replace(',', '.')) || 0,
+          };
+        }),
+        order: index,
+      });
+    });
+
+    // Processar bloco de manutenção
+    blocos.manutencao.forEach((atividade, index) => {
+      activities.push({
+        name: atividade.name,
+        type: 'manutencao',
+        progress: parseFloat(atividade.value?.replace(',', '.')) || 0,
+        baseline: parseFloat(atividade.baseline?.replace(',', '.')) || 0,
+        subActivities: atividade.sub_activities.map((sub) => {
+          const [nome, valores] = sub.split(':');
+          const [real, planejado] = valores.split('|');
+          return {
+            name: nome,
+            progress: parseFloat(real?.replace(',', '.')) || 0,
+            baseline: parseFloat(planejado?.replace(',', '.')) || 0,
+          };
+        }),
+        order: index,
+      });
+    });
+
+    // Processar bloco de partida
+    blocos.partida.forEach((atividade, index) => {
+      activities.push({
+        name: atividade.name,
+        type: 'partida',
+        progress: parseFloat(atividade.value?.replace(',', '.')) || 0,
+        baseline: parseFloat(atividade.baseline?.replace(',', '.')) || 0,
+        subActivities: atividade.sub_activities.map((sub) => {
+          const [nome, valores] = sub.split(':');
+          const [real, planejado] = valores.split('|');
+          return {
+            name: nome,
+            progress: parseFloat(real?.replace(',', '.')) || 0,
+            baseline: parseFloat(planejado?.replace(',', '.')) || 0,
+          };
+        }),
+        order: index,
+      });
+    });
+
+    // Criar projeto com os dados processados
+    const projectData = {
+      name: nomeProject,
+      description: `Projeto importado do arquivo CSV: ${req.file.originalname}`,
+      status: 'active',
+      priority: 'medium',
+      startDate: new Date(),
+      endDate: null,
+      deadline: null,
+      budget: 0,
+      tags: ['csv-import'],
+      owner: req.user?.id || '60d5ecb54b24a03d1c8b4567',
+      progress: estatisticas.progressoGeral,
+      activities: activities,
+      metadata: {
+        csvImport: true,
+        estatisticas: estatisticas,
+        blocos: {
+          parada: blocos.parada.length,
+          manutencao: blocos.manutencao.length,
+          partida: blocos.partida.length,
+        },
+        processedAt: new Date(),
+      },
+    };
+
+    const project = await projectService.createProject(projectData);
+
+    // Limpar arquivo temporário
+    try {
+      require('fs').unlinkSync(req.file.path);
+    } catch (cleanupError) {
+      logger.warn('Erro ao limpar arquivo temporário', {
+        error: cleanupError.message,
+      });
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: CSV project uploaded successfully`, {
+      projectId: project._id,
+      projectName: project.name,
+      totalActivities: estatisticas.totalAtividades,
+      progressoGeral: estatisticas.progressoGeral,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Projeto criado com sucesso a partir do CSV',
+      data: {
+        project: {
+          id: project._id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
+          progress: project.progress,
+          createdAt: project.createdAt,
+        },
+        estatisticas,
+        blocos: {
+          parada: blocos.parada.length,
+          manutencao: blocos.manutencao.length,
+          partida: blocos.partida.length,
+        },
+        processamento: {
+          totalAtividades: estatisticas.totalAtividades,
+          atividadesCompletas: estatisticas.atividadesCompletas,
+          progressoGeral: `${estatisticas.progressoGeral}%`,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    // Limpar arquivo em caso de erro
+    if (req.file) {
+      try {
+        require('fs').unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        logger.warn('Erro ao limpar arquivo após falha', {
+          error: cleanupError.message,
+        });
+      }
+    }
+
+    logger.error(`${action}: Failed to upload CSV project`, {
+      error: error.message,
+      stack: error.stack,
+      fileName: req.file?.originalname,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+// NOVAS FUNCIONALIDADES BASEADAS NO FLASK app.py - CARREGAMENTO DOS DADOS DO PROJETO
+
+// Função para processar atividades do projeto (baseada no load_frentes_from_csv do Flask)
+const processProjectActivities = (activities, tipo) => {
+  console.log(`=== processProjectActivities chamada para tipo: ${tipo} ===`);
+  console.log(`Total de atividades recebidas: ${activities.length}`);
+
+  const filtered = activities.filter((activity) => activity.type === tipo);
+  console.log(`Atividades filtradas para tipo ${tipo}: ${filtered.length}`);
+
+  return filtered.map((activity) => {
+    const subActivities = activity.subActivities.map((sub) => ({
+      name: sub.name,
+      real: Math.min(100, sub.progress || 0),
+      planned: Math.min(100, sub.baseline || 0),
+    }));
+
+    return {
+      name: activity.name,
+      planned: Math.min(100, activity.baseline || 0),
+      real: Math.min(100, activity.progress || 0),
+      image: getActivityImage(activity.name),
+      sub_activities: subActivities,
+    };
+  });
+};
+
+// Função para mapear imagens das atividades (baseada no IMAGE_MAPPING do Flask)
+const getActivityImage = (activityName) => {
+  const IMAGE_MAPPING = {
+    'Pátio de Alimentação': '/static/images/frentes/patioAlimentacao.png',
+    Secagem: '/static/images/frentes/secagem.png',
+    'Torre de Resfriamento': '/static/images/frentes/TorreResfriamento.png',
+    Mistura: '/static/images/frentes/mistura.png',
+    Briquetagem: '/static/images/frentes/briquetagem.png',
+    Forno: '/static/images/frentes/forno.png',
+    Ventiladores: '/static/images/frentes/ventilador.png',
+    Precipitadores: '/static/images/frentes/precipitador.png',
+    Peneiramento: '/static/images/frentes/peneiramento.png',
+    'Pátio de Briquete': '/static/images/frentes/patioBriquete.png',
+    'Retorno da Mistura': '/static/images/frentes/retornoMistura.png',
+    'Retorno da Produção': '/static/images/frentes/retornoProducao.png',
+    'Teste Operacional dos Ventiladores':
+      '/static/images/frentes/testeOperacionalVentiladores.png',
+    'Torre de Refriamento': '/static/images/frentes/TorreResfriamento.png',
+  };
+
+  return (
+    IMAGE_MAPPING[activityName] ||
+    '/static/images/frentes/default-placeholder.png'
+  );
+};
+
+// API para carregar frentes de procedimento de parada (baseado no Flask)
+const getProcedimentoParada = async (req, res, next) => {
+  const action = 'GET_PROCEDIMENTO_PARADA';
+  const startTime = Date.now();
+
+  try {
+    console.log('=== FUNÇÃO getProcedimentoParada CHAMADA ===');
+    logger.info(`${action}: Carregando frentes de procedimento de parada`, {
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.getProjectById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const frentes = processProjectActivities(
+      project.activities || [],
+      'parada'
+    );
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Success`, {
+      projectId: req.params.id,
+      count: frentes.length,
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json(frentes); // Retorna diretamente o array como no Flask
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+// API para carregar frentes de manutenção (baseado no Flask)
+const getManutencao = async (req, res, next) => {
+  const action = 'GET_MANUTENCAO';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Carregando frentes de manutenção`, {
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.getProjectById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const frentes = processProjectActivities(
+      project.activities || [],
+      'manutencao'
+    );
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Success`, {
+      projectId: req.params.id,
+      count: frentes.length,
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json(frentes); // Retorna diretamente o array como no Flask
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+// API para carregar frentes de procedimento de partida (baseado no Flask)
+const getProcedimentoPartida = async (req, res, next) => {
+  const action = 'GET_PROCEDIMENTO_PARTIDA';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Carregando frentes de procedimento de partida`, {
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.getProjectById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const frentes = processProjectActivities(
+      project.activities || [],
+      'partida'
+    );
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Success`, {
+      projectId: req.params.id,
+      count: frentes.length,
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json(frentes); // Retorna diretamente o array como no Flask
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+// API para carregar todas as frentes organizadas por bloco
+const getAllFrentes = async (req, res, next) => {
+  const action = 'GET_ALL_FRENTES';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Carregando todas as frentes do projeto`, {
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.getProjectById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const allFrentes = {
+      procedimento_parada: processProjectActivities(
+        project.activities || [],
+        'parada'
+      ),
+      manutencao: processProjectActivities(
+        project.activities || [],
+        'manutencao'
+      ),
+      procedimento_partida: processProjectActivities(
+        project.activities || [],
+        'partida'
+      ),
+    };
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Success`, {
+      projectId: req.params.id,
+      totalCount: Object.values(allFrentes).flat().length,
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json(allFrentes); // Retorna diretamente o objeto como no Flask
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+// API para carregar estatísticas do projeto
+const getProjectStatistics = async (req, res, next) => {
+  const action = 'GET_PROJECT_STATISTICS';
+  const startTime = Date.now();
+
+  try {
+    logger.info(`${action}: Carregando estatísticas do projeto`, {
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+    });
+
+    const project = await projectService.getProjectById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    const statistics = {
+      geral: {
+        totalAtividades: project.activities?.length || 0,
+        progressoGeral: project.progress || 0,
+        status: project.status,
+        dataInicio: project.startDate,
+        dataFim: project.endDate,
+      },
+      porBloco: project.metadata?.estatisticas?.progressoPorBloco || {},
+      atividades: {
+        parada:
+          project.activities?.filter((a) => a.type === 'parada').length || 0,
+        manutencao:
+          project.activities?.filter((a) => a.type === 'manutencao').length ||
+          0,
+        partida:
+          project.activities?.filter((a) => a.type === 'partida').length || 0,
+      },
+    };
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Success`, {
+      projectId: req.params.id,
+      totalAtividades: statistics.geral.totalAtividades,
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Estatísticas do projeto carregadas com sucesso',
+      data: statistics,
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Failed`, {
+      error: error.message,
+      stack: error.stack,
+      projectId: req.params.id,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+    next(error);
+  }
+};
+
+// Função para atualizar projeto existente com novo CSV
+const updateProjectFromCSV = async (req, res, next) => {
+  const action = 'UPDATE_PROJECT_CSV';
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+
+    logger.info(`${action}: Starting CSV project update`, {
+      projectId: id,
+      userId: req.user?.id || 'anonymous',
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+    });
+
+    // Validar se projeto existe
+    const existingProject = await projectService.getProjectById(id);
+    if (!existingProject) {
+      logger.warn(`${action}: Project not found`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(404).json({
+        status: 'error',
+        type: 'NOT_FOUND',
+        message: 'Projeto não encontrado',
+        details: ['O projeto especificado não existe'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Validar se arquivo foi enviado
+    if (!req.file) {
+      logger.warn(`${action}: No file uploaded`, {
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Nenhum arquivo foi enviado',
+        details: ['É necessário enviar um arquivo CSV para processar'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Validar tipo de arquivo
+    if (!req.file.originalname.toLowerCase().endsWith('.csv')) {
+      logger.warn(`${action}: Invalid file type`, {
+        fileName: req.file.originalname,
+        projectId: id,
+        userId: req.user?.id || 'anonymous',
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        type: 'VALIDATION_ERROR',
+        message: 'Tipo de arquivo inválido',
+        details: ['Apenas arquivos CSV são aceitos'],
+        timestamp: new Date().toISOString(),
+        requestId: req.id,
+      });
+    }
+
+    // Usar nome do projeto existente ou permitir novo nome
+    const { projectName } = req.body;
+    const nomeProject = projectName || existingProject.name;
+
+    // Processar arquivo CSV - isto irá criar os dados atualizados
+    const resultado = await csvProjectProcessor.processarArquivoCSV(
+      req.file.path,
+      nomeProject,
+      req.user?.id || existingProject.createdBy
+    );
+
+    // Atualizar o projeto existente com os novos dados do CSV
+    const updatedProjectData = {
+      name: nomeProject,
+      description: resultado.project.description,
+      status: resultado.project.status,
+      priority: resultado.project.priority,
+      progress: resultado.project.progress,
+      activities: resultado.project.activities,
+      // Manter dados existentes que não vêm do CSV
+      createdBy: existingProject.createdBy,
+      createdAt: existingProject.createdAt,
+      // Atualizar timestamp de modificação
+      updatedAt: new Date(),
+    };
+
+    const updatedProject = await projectService.updateProject(
+      id,
+      updatedProjectData
+    );
+
+    // Limpar arquivo temporário
+    try {
+      require('fs').unlinkSync(req.file.path);
+    } catch (cleanupError) {
+      logger.warn('Erro ao limpar arquivo temporário', {
+        error: cleanupError.message,
+      });
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`${action}: Project updated successfully from CSV`, {
+      projectId: id,
+      projectName: updatedProject.name,
+      totalActivities: resultado.estatisticas.totalAtividades,
+      progressoGeral: resultado.estatisticas.progressoGeral,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Projeto atualizado com sucesso a partir do CSV',
+      data: {
+        project: {
+          id: updatedProject._id,
+          name: updatedProject.name,
+          description: updatedProject.description,
+          status: updatedProject.status,
+          priority: updatedProject.priority,
+          progress: updatedProject.progress,
+          updatedAt: updatedProject.updatedAt,
+        },
+        estatisticas: resultado.estatisticas,
+        blocos: {
+          parada: resultado.blocos.parada.length,
+          manutencao: resultado.blocos.manutencao.length,
+          partida: resultado.blocos.partida.length,
+        },
+        processamento: {
+          totalAtividades: resultado.estatisticas.totalAtividades,
+          atividadesCompletas: resultado.estatisticas.atividadesCompletas,
+          progressoGeral: `${resultado.estatisticas.progressoGeral}%`,
+        },
+      },
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(`${action}: Error updating project from CSV`, {
+      projectId: req.params.id,
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id || 'anonymous',
+      duration: `${duration}ms`,
+    });
+
+    // Limpar arquivo temporário em caso de erro
+    if (req.file && req.file.path) {
+      try {
+        require('fs').unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        logger.warn('Erro ao limpar arquivo temporário após erro', {
+          error: cleanupError.message,
+        });
+      }
+    }
+
+    next(error);
+  }
+};
+
+module.exports = {
+  createProject,
+  getAllProjects,
+  getProjectById,
+  updateProject,
+  deleteProject,
+  getProjectsByUser,
+  addTeamMember,
+  removeTeamMember,
+  uploadProjectFromCSV,
+  updateProjectFromCSV,
+  getProcedimentoParada,
+  getManutencao,
+  getProcedimentoPartida,
+  getAllFrentes,
+  getProjectStatistics,
+};

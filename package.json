@@ -1,7 +1,35 @@
 {
+  "name": "epu-gestao",
+  "version": "1.0.0",
+  "description": "Sistema de Gestão EPU",
+  "main": "index.js",
+  "scripts": {
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down",
+    "build": "docker-compose build",
+    "logs": "docker-compose logs -f",
+    "frontend": "cd frontend && npm start",
+    "backend": "cd backend && npm start",
+    "install-deps": "cd frontend && npm install && cd ../backend && npm install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "keywords": [
+    "react",
+    "nodejs",
+    "mongodb",
+    "docker"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "axios": "^1.10.0",
-    "node-fetch": "^3.3.2",
-    "xhr2": "^0.2.1"
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.1",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.1"
   }
 }

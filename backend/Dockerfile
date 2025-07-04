@@ -8,10 +8,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependências
-RUN npm ci --only=production
+RUN npm install --only=production --legacy-peer-deps
 
 # Copiar código fonte
 COPY . .
+
+# Copiar arquivo de ambiente Docker
+COPY src/.env.docker src/.env
 
 # Criar usuário não-root para segurança
 RUN addgroup -g 1001 -S nodejs
@@ -22,7 +25,7 @@ RUN chown -R nodejs:nodejs /app
 USER nodejs
 
 # Expor porta
-EXPOSE 5000
+EXPOSE 3001
 
 # Comando de saúde
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

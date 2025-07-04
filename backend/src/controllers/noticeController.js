@@ -1,3 +1,21 @@
+/**
+ * Notice Controller - Clean Architecture Implementation
+ *
+ * Controller responsável pelo gerenciamento de avisos seguindo
+ * os princípios de Clean Architecture e SOLID.
+ *
+ * Funcionalidades:
+ * - CRUD completo de avisos
+ * - Sistema de notificações
+ * - Filtros por urgência e categoria
+ * - Gestão de leitura/não leitura
+ * - Validação de dados
+ *
+ * @version 3.0.0
+ * @architecture Clean Architecture
+ * @layer Interface/Controllers
+ */
+
 const noticeService = require('../services/noticeServices');
 const logger = require('../utils/logger');
 
