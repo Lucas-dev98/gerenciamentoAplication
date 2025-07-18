@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teste de Login - EPU-Gestão</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 50px auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-right: 10px;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      .logout-btn {
+        background-color: #dc3545;
+      }
+      .logout-btn:hover {
+        background-color: #c82333;
+      }
+      .result {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 5px;
+        white-space: pre-wrap;
+      }
+      .success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+      }
+      .info {
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔐 Teste de Login - EPU-Gestão</h1>
+
+      <div class="form-group">
+        <label for="email">Email:</label>
+        <input type="email" id="email" value="l.o.bastos@live.com" />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Senha:</label>
+        <input type="password" id="password" value="44351502741-+as" />
+      </div>
+
+      <button onclick="doLogin()">Fazer Login</button>
+      <button onclick="checkAuthState()" class="info">Verificar Estado</button>
+      <button onclick="doLogout()" class="logout-btn">Limpar Dados</button>
+      <button onclick="openFrontend()">Abrir Frontend</button>
+
+      <div id="result"></div>
+    </div>
+
+    <script>
+      function showResult(message, type = 'info') {
+        const resultDiv = document.getElementById('result');
+        resultDiv.className = `result ${type}`;
+        resultDiv.textContent = message;
+      }
+
+      async function doLogin() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        try {
+          showResult('Fazendo login...', 'info');
+
+          const response = await fetch('http://localhost:5000/api/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            // Salvar dados no localStorage
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+
+            showResult(
+              `✅ Login realizado com sucesso!
+Dados salvos no localStorage:
+- Token: ${data.token.substring(0, 30)}...
+- User: ${JSON.stringify(data.user, null, 2)}
+
+Agora você pode abrir o frontend e o botão "Sair" deve aparecer.`,
+              'success'
+            );
+          } else {
+            showResult(`❌ Erro no login: ${data.message}`, 'error');
+          }
+        } catch (error) {
+          showResult(`❌ Erro de conexão: ${error.message}`, 'error');
+        }
+      }
+
+      function checkAuthState() {
+        const token = localStorage.getItem('token');
+        const user = localStorage.getItem('user');
+
+        if (token && user) {
+          try {
+            const userObj = JSON.parse(user);
+            showResult(
+              `🔍 Estado da autenticação:
+- Token existe: ✅ (${token.substring(0, 30)}...)
+- User existe: ✅
+- Dados do usuário: ${JSON.stringify(userObj, null, 2)}`,
+              'info'
+            );
+          } catch (e) {
+            showResult(
+              `🔍 Estado da autenticação:
+- Token existe: ✅
+- User existe: ❌ (dados corrompidos)
+- Erro: ${e.message}`,
+              'error'
+            );
+          }
+        } else {
+          showResult(
+            `🔍 Estado da autenticação:
+- Token existe: ${token ? '✅' : '❌'}
+- User existe: ${user ? '✅' : '❌'}
+                
+Faça login primeiro para ver o botão "Sair" no frontend.`,
+            'info'
+          );
+        }
+      }
+
+      function doLogout() {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        showResult(
+          '🗑️ Dados de autenticação removidos do localStorage.',
+          'info'
+        );
+      }
+
+      function openFrontend() {
+        window.open('http://localhost:3000', '_blank');
+      }
+
+      // Verificar estado inicial
+      checkAuthState();
+    </script>
+  </body>
+</html>

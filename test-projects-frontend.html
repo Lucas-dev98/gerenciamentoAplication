@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teste - Projetos Frontend</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .project-card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 10px 0;
+        background: #fafafa;
+      }
+      .project-name {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 8px;
+      }
+      .project-info {
+        color: #666;
+        font-size: 0.9em;
+      }
+      .status {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+      .status.active {
+        background: #d4edda;
+        color: #155724;
+      }
+      .status.draft {
+        background: #fff3cd;
+        color: #856404;
+      }
+      .status.completed {
+        background: #d1ecf1;
+        color: #0c5460;
+      }
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 16px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+        padding: 16px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      .btn {
+        background: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      .btn:hover {
+        background: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 Teste de Carregamento de Projetos</h1>
+
+      <div id="status">
+        <div class="loading">⏳ Inicializando...</div>
+      </div>
+
+      <div>
+        <button class="btn" onclick="doLogin()">🔐 Fazer Login</button>
+        <button class="btn" onclick="loadProjects()">
+          📋 Carregar Projetos
+        </button>
+        <button class="btn" onclick="clearToken()">🗑️ Limpar Token</button>
+        <button class="btn" onclick="checkToken()">🔍 Verificar Token</button>
+      </div>
+
+      <div id="projects-container"></div>
+    </div>
+
+    <script>
+      const API_BASE_URL = 'http://localhost:5000';
+
+      function log(message, type = 'info') {
+        const statusDiv = document.getElementById('status');
+        const className =
+          type === 'error'
+            ? 'error'
+            : type === 'success'
+              ? 'success'
+              : 'loading';
+        statusDiv.innerHTML = `<div class="${className}">${message}</div>`;
+        console.log(message);
+      }
+
+      function getToken() {
+        return localStorage.getItem('token');
+      }
+
+      function setToken(token) {
+        localStorage.setItem('token', token);
+        log('✅ Token salvo no localStorage', 'success');
+      }
+
+      function clearToken() {
+        localStorage.removeItem('token');
+        log('🗑️ Token removido do localStorage', 'success');
+        document.getElementById('projects-container').innerHTML = '';
+      }
+
+      function checkToken() {
+        const token = getToken();
+        if (token) {
+          log(
+            `🔑 Token existe (${token.length} chars): ${token.substring(0, 50)}...`,
+            'success'
+          );
+        } else {
+          log('❌ Nenhum token encontrado no localStorage', 'error');
+        }
+      }
+
+      async function doLogin() {
+        try {
+          log('🔐 Fazendo login...');
+
+          const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: 'l.o.bastos@live.com',
+              password: '44351502741-+as',
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            setToken(data.token);
+            log(`✅ Login realizado! Usuário: ${data.user.name}`, 'success');
+          } else {
+            log(`❌ Erro no login: ${data.message}`, 'error');
+          }
+        } catch (error) {
+          log(`❌ Erro na requisição de login: ${error.message}`, 'error');
+        }
+      }
+
+      async function loadProjects() {
+        try {
+          const token = getToken();
+          if (!token) {
+            log('❌ Token não encontrado. Faça login primeiro.', 'error');
+            return;
+          }
+
+          log('📋 Carregando projetos...');
+
+          const response = await fetch(`${API_BASE_URL}/api/projects`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            const projects = data.data?.data || [];
+            log(`✅ ${projects.length} projetos carregados!`, 'success');
+            displayProjects(projects);
+          } else {
+            log(`❌ Erro ao carregar projetos: ${data.message}`, 'error');
+            if (response.status === 401) {
+              log('🔐 Token expirado. Faça login novamente.', 'error');
+            }
+          }
+        } catch (error) {
+          log(`❌ Erro na requisição: ${error.message}`, 'error');
+        }
+      }
+
+      function displayProjects(projects) {
+        const container = document.getElementById('projects-container');
+
+        if (projects.length === 0) {
+          container.innerHTML =
+            '<div class="loading">📭 Nenhum projeto encontrado</div>';
+          return;
+        }
+
+        let html = '<h2>📋 Projetos Encontrados</h2>';
+
+        projects.forEach((project, index) => {
+          html += `
+                    <div class="project-card">
+                        <div class="project-name">${project.name || 'Sem nome'}</div>
+                        <div class="project-info">
+                            <span class="status ${project.status}">${project.status || 'N/A'}</span>
+                            <br>
+                            <strong>ID:</strong> ${project._id}<br>
+                            <strong>Descrição:</strong> ${project.description || 'Sem descrição'}<br>
+                            <strong>Tipo:</strong> ${project.type || 'N/A'}<br>
+                            <strong>Prioridade:</strong> ${project.priority || 'N/A'}<br>
+                            <strong>Criado:</strong> ${project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'N/A'}
+                        </div>
+                    </div>
+                `;
+        });
+
+        container.innerHTML = html;
+      }
+
+      // Verificar token ao carregar
+      window.onload = function () {
+        checkToken();
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Debug - Navegação Cards</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f8fafc;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      .btn {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin: 10px 5px;
+        font-size: 16px;
+      }
+      .btn:hover {
+        background: #2563eb;
+      }
+      .success {
+        background: #10b981;
+      }
+      .warning {
+        background: #f59e0b;
+      }
+      .error {
+        background: #ef4444;
+      }
+      #log {
+        background: #1f2937;
+        color: #f9fafb;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        max-height: 400px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .iframe-container {
+        margin: 20px 0;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      iframe {
+        width: 100%;
+        height: 600px;
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🐛 Debug - Navegação dos Cards</h1>
+
+      <div style="margin: 20px 0">
+        <button class="btn" onclick="openProjectsPage()">
+          🔗 Abrir Página de Projetos
+        </button>
+        <button class="btn warning" onclick="injectDebugScript()">
+          🔧 Injetar Debug Script
+        </button>
+        <button class="btn success" onclick="testDirectNavigation()">
+          🚀 Testar Navegação Direta
+        </button>
+        <button class="btn error" onclick="clearLog()">🧹 Limpar Log</button>
+      </div>
+
+      <div id="log">Clique nos botões acima para iniciar o debug...</div>
+
+      <div class="iframe-container" id="iframe-container" style="display: none">
+        <iframe id="test-frame" src="about:blank"></iframe>
+      </div>
+    </div>
+
+    <script>
+      const log = document.getElementById('log');
+      const iframe = document.getElementById('test-frame');
+      const iframeContainer = document.getElementById('iframe-container');
+
+      function writeLog(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        log.textContent += `[${timestamp}] ${message}\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function clearLog() {
+        log.textContent = 'Log limpo...\n';
+      }
+
+      function openProjectsPage() {
+        writeLog('🔗 Abrindo página de projetos...');
+        iframeContainer.style.display = 'block';
+        iframe.src = 'http://localhost:3000/projetos';
+
+        iframe.onload = () => {
+          writeLog('✅ Página carregada no iframe');
+          writeLog('🎯 Agora você pode injetar o script de debug');
+        };
+
+        iframe.onerror = () => {
+          writeLog('❌ Erro ao carregar página');
+        };
+      }
+
+      function injectDebugScript() {
+        if (!iframe.contentWindow) {
+          writeLog('❌ Iframe não carregado. Abra a página primeiro.');
+          return;
+        }
+
+        try {
+          const script = iframe.contentDocument.createElement('script');
+          script.textContent = `
+// Debug script injetado
+console.log('🔧 Script de debug injetado!');
+
+function debugNavigation() {
+    console.log('🔍 Debugando navegação...');
+    
+    // Encontrar cards
+    const cards = document.querySelectorAll('[style*="cursor: pointer"]');
+    console.log('Cards encontrados:', cards.length);
+    
+    if (cards.length > 0) {
+        const firstCard = cards[0];
+        console.log('Primeiro card:', firstCard);
+        
+        // Destacar card
+        firstCard.style.border = '3px solid red';
+        firstCard.style.boxShadow = '0 0 15px rgba(255, 0, 0, 0.8)';
+        
+        // Adicionar listener
+        firstCard.addEventListener('click', (e) => {
+            console.log('🖱️ Card clicado!');
+            console.log('URL antes:', window.location.href);
+            console.log('Event target:', e.target);
+            console.log('Current target:', e.currentTarget);
+            
+            setTimeout(() => {
+                console.log('URL depois:', window.location.href);
+            }, 100);
+        }, true);
+        
+        console.log('✅ Debug listener adicionado');
+        
+        // Verificar propriedades do card
+        console.log('onClick definido:', firstCard.onclick);
+        console.log('Event listeners:', getEventListeners ? getEventListeners(firstCard) : 'N/A');
+        
+        // Tentar encontrar dados do projeto
+        const projectData = firstCard.textContent;
+        console.log('Dados do card:', projectData?.substring(0, 100));
+        
+    } else {
+        console.log('❌ Nenhum card encontrado');
+        
+        // Procurar por elementos alternativos
+        const allDivs = document.querySelectorAll('div');
+        console.log('Total de divs:', allDivs.length);
+        
+        const clickableDivs = Array.from(allDivs).filter(div => 
+            div.onclick || 
+            div.style.cursor === 'pointer' || 
+            div.getAttribute('role') === 'button'
+        );
+        console.log('Divs clicáveis:', clickableDivs.length);
+        
+        clickableDivs.forEach((div, i) => {
+            console.log(\`Div clicável \${i+1}:\`, div.className, div.textContent?.substring(0, 50));
+        });
+    }
+    
+    // Verificar React Router
+    console.log('React:', window.React ? '✅' : '❌');
+    console.log('ReactRouter:', window.ReactRouter ? '✅' : '❌');
+    console.log('History API:', window.history.pushState ? '✅' : '❌');
+}
+
+// Executar debug após um tempo
+setTimeout(debugNavigation, 2000);
+
+// Função global para teste manual
+window.debugNav = debugNavigation;
+window.testNavigationManual = function(id = 'test') {
+    console.log('🧪 Teste manual de navegação para ID:', id);
+    const url = \`/projetos/\${id}\`;
+    console.log('Tentando navegar para:', url);
+    
+    window.history.pushState({}, '', url);
+    console.log('URL atualizada');
+    
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    console.log('Evento disparado');
+};
+
+console.log('💡 Use debugNav() ou testNavigationManual("ID") no console');
+`;
+
+          iframe.contentDocument.head.appendChild(script);
+          writeLog('✅ Script de debug injetado com sucesso');
+          writeLog('📋 Verifique o console do iframe (DevTools)');
+          writeLog('🎯 O primeiro card deve ficar destacado em vermelho');
+        } catch (error) {
+          writeLog('❌ Erro ao injetar script: ' + error.message);
+        }
+      }
+
+      function testDirectNavigation() {
+        writeLog('🚀 Testando navegação direta...');
+
+        // Abrir nova aba com URL de projeto
+        const testProjectId = '507f1f77bcf86cd799439011'; // ID de exemplo
+        const url = 'http://localhost:3000/projetos/' + testProjectId;
+
+        writeLog('📍 Abrindo: ' + url);
+        window.open(url, '_blank');
+
+        writeLog(
+          '✅ Nova aba aberta - verifique se carrega a página de detalhamento'
+        );
+      }
+
+      // Auto-inicialização
+      writeLog('🚀 Debug de navegação carregado');
+      writeLog('📋 Passos:');
+      writeLog('1. Clique em "Abrir Página de Projetos"');
+      writeLog('2. Aguarde carregar');
+      writeLog('3. Clique em "Injetar Debug Script"');
+      writeLog('4. Abra DevTools (F12) e vá para Console');
+      writeLog('5. Clique no card destacado em vermelho');
+      writeLog('6. Verifique os logs no console');
+    </script>
+  </body>
+</html>
