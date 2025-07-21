@@ -24,6 +24,9 @@ const teamRoutes = require('./src/routes/teamRoutes');
 // Importar rotas de usuários
 const userRoutes = require('./src/routes/userRoutes');
 
+// Importar rotas de clima
+const weatherRoutes = require('./src/routes/weatherRoutes');
+
 // Middleware de segurança
 app.use(
   helmet({
@@ -147,6 +150,9 @@ app.use('/api/teams', teamRoutes);
 
 // Configurar rotas de usuários
 app.use('/api/users', userRoutes);
+
+// Configurar rotas de clima
+app.use('/api/weather', weatherRoutes);
 
 // Schema do projeto
 const projectSchema = new mongoose.Schema(

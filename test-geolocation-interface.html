@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teste de Geolocalização - EPU</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      .button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      .button:hover {
+        background: #0056b3;
+      }
+      .result {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 10px 0;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+      .success {
+        border-color: #28a745;
+        background-color: #d4edda;
+      }
+      .error {
+        border-color: #dc3545;
+        background-color: #f8d7da;
+      }
+      .loading {
+        border-color: #ffc107;
+        background-color: #fff3cd;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🌍 Teste de Geolocalização e API do Clima - EPU</h1>
+
+    <div class="container">
+      <h2>1. Teste da API Backend</h2>
+      <button class="button" onclick="testBackendAPI()">
+        🔧 Testar API Backend
+      </button>
+      <div id="backend-result" class="result"></div>
+    </div>
+
+    <div class="container">
+      <h2>2. Teste de Geolocalização</h2>
+      <button class="button" onclick="testGeolocation()">
+        📍 Obter Localização
+      </button>
+      <div id="location-result" class="result"></div>
+    </div>
+
+    <div class="container">
+      <h2>3. Teste de Dados Reais</h2>
+      <button class="button" onclick="testRealWeatherData()">
+        🌡️ Buscar Clima Real
+      </button>
+      <div id="weather-result" class="result"></div>
+    </div>
+
+    <div class="container">
+      <h2>4. Teste Completo (Geolocalização + Clima)</h2>
+      <button class="button" onclick="testCompleteFlow()">
+        🚀 Teste Completo
+      </button>
+      <div id="complete-result" class="result"></div>
+    </div>
+
+    <script>
+      // Função para mostrar resultado
+      function showResult(elementId, message, type = 'info') {
+        const element = document.getElementById(elementId);
+        element.textContent = message;
+        element.className = `result ${type}`;
+      }
+
+      // 1. Teste da API Backend
+      async function testBackendAPI() {
+        showResult('backend-result', 'Testando API backend...', 'loading');
+
+        try {
+          const response = await fetch('/api/weather/test');
+          const data = await response.json();
+
+          if (response.ok && data.status === 'ok') {
+            showResult(
+              'backend-result',
+              `✅ API Backend funcionando!\n` +
+                `Status: ${data.status}\n` +
+                `Mensagem: ${data.message}`,
+              'success'
+            );
+          } else {
+            showResult(
+              'backend-result',
+              `❌ API Backend com problema\n` +
+                `Status: ${response.status}\n` +
+                `Resposta: ${JSON.stringify(data)}`,
+              'error'
+            );
+          }
+        } catch (error) {
+          showResult(
+            'backend-result',
+            `❌ Erro ao conectar com backend:\n${error.message}`,
+            'error'
+          );
+        }
+      }
+
+      // 2. Teste de Geolocalização
+      async function testGeolocation() {
+        showResult('location-result', 'Obtendo localização...', 'loading');
+
+        if (!navigator.geolocation) {
+          showResult(
+            'location-result',
+            '❌ Geolocalização não suportada neste navegador',
+            'error'
+          );
+          return;
+        }
+
+        try {
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 300000,
+            });
+          });
+
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          const accuracy = position.coords.accuracy;
+
+          showResult(
+            'location-result',
+            `✅ Localização obtida com sucesso!\n` +
+              `Latitude: ${lat.toFixed(6)}\n` +
+              `Longitude: ${lon.toFixed(6)}\n` +
+              `Precisão: ${accuracy.toFixed(0)}m`,
+            'success'
+          );
+
+          // Salvar coordenadas para próximos testes
+          window.testCoords = { lat, lon };
+        } catch (error) {
+          let errorMessage = 'Erro desconhecido';
+
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Permissão negada pelo usuário';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Localização indisponível';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Timeout ao obter localização';
+              break;
+          }
+
+          showResult(
+            'location-result',
+            `❌ Erro ao obter localização:\n${errorMessage}`,
+            'error'
+          );
+        }
+      }
+
+      // 3. Teste de Dados Reais do Clima
+      async function testRealWeatherData() {
+        showResult('weather-result', 'Buscando dados do clima...', 'loading');
+
+        const coords = window.testCoords || { lat: -23.5505, lon: -46.6333 };
+
+        try {
+          const response = await fetch(
+            `/api/weather/weather?lat=${coords.lat}&lon=${coords.lon}`
+          );
+          const data = await response.json();
+
+          if (response.ok) {
+            showResult(
+              'weather-result',
+              `✅ Dados reais do clima obtidos!\n` +
+                `📍 Local: ${data.name}\n` +
+                `🌡️ Temperatura: ${Math.round(data.main.temp)}°C\n` +
+                `☁️ Descrição: ${data.weather[0].description}\n` +
+                `💧 Umidade: ${data.main.humidity}%\n` +
+                `💨 Vento: ${Math.round(data.wind.speed * 3.6)} km/h\n` +
+                `🔄 Coordenadas: ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`,
+              'success'
+            );
+          } else {
+            showResult(
+              'weather-result',
+              `❌ Erro ao buscar clima:\n` +
+                `Status: ${response.status}\n` +
+                `Erro: ${JSON.stringify(data)}`,
+              'error'
+            );
+          }
+        } catch (error) {
+          showResult(
+            'weather-result',
+            `❌ Erro ao conectar com API do clima:\n${error.message}`,
+            'error'
+          );
+        }
+      }
+
+      // 4. Teste Completo
+      async function testCompleteFlow() {
+        showResult('complete-result', 'Iniciando teste completo...', 'loading');
+
+        try {
+          // Passo 1: Testar backend
+          showResult(
+            'complete-result',
+            'Passo 1/3: Testando backend...',
+            'loading'
+          );
+          const backendResponse = await fetch('/api/weather/test');
+          const backendData = await backendResponse.json();
+
+          if (!backendResponse.ok || backendData.status !== 'ok') {
+            throw new Error('Backend não está funcionando');
+          }
+
+          // Passo 2: Obter localização
+          showResult(
+            'complete-result',
+            'Passo 2/3: Obtendo localização...',
+            'loading'
+          );
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 300000,
+            });
+          });
+
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+
+          // Passo 3: Buscar clima real
+          showResult(
+            'complete-result',
+            'Passo 3/3: Buscando clima para sua localização...',
+            'loading'
+          );
+          const weatherResponse = await fetch(
+            `/api/weather/weather?lat=${lat}&lon=${lon}`
+          );
+          const weatherData = await weatherResponse.json();
+
+          if (!weatherResponse.ok) {
+            throw new Error('Erro ao buscar dados do clima');
+          }
+
+          // Sucesso completo!
+          showResult(
+            'complete-result',
+            `🎉 TESTE COMPLETO REALIZADO COM SUCESSO!\n\n` +
+              `✅ Backend funcionando\n` +
+              `✅ Geolocalização obtida\n` +
+              `✅ Dados reais do clima carregados\n\n` +
+              `📍 Sua localização: ${weatherData.name}\n` +
+              `🌡️ Temperatura atual: ${Math.round(weatherData.main.temp)}°C\n` +
+              `☁️ Condições: ${weatherData.weather[0].description}\n` +
+              `💧 Umidade: ${weatherData.main.humidity}%\n` +
+              `💨 Vento: ${Math.round(weatherData.wind.speed * 3.6)} km/h\n\n` +
+              `🔄 Coordenadas: ${lat.toFixed(6)}, ${lon.toFixed(6)}\n` +
+              `⏰ Teste realizado em: ${new Date().toLocaleString()}`,
+            'success'
+          );
+        } catch (error) {
+          showResult(
+            'complete-result',
+            `❌ TESTE COMPLETO FALHOU:\n${error.message}\n\n` +
+              `Verifique:\n` +
+              `• Se o backend está rodando\n` +
+              `• Se você permitiu acesso à localização\n` +
+              `• Se sua conexão com internet está funcionando`,
+            'error'
+          );
+        }
+      }
+
+      // Executar teste inicial ao carregar a página
+      window.addEventListener('load', () => {
+        console.log('🌍 Página de teste carregada');
+        console.log('Clique nos botões para testar cada funcionalidade');
+      });
+    </script>
+  </body>
+</html>

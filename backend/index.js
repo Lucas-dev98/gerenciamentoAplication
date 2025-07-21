@@ -11,6 +11,7 @@
  * @architecture Clean Architecture - Main/Composition Root
  */
 
+console.log('🚀 Starting EPU Backend Server...');
 require('dotenv').config({ path: './.env' });
 const express = require('express');
 const path = require('path');
@@ -25,6 +26,8 @@ const requestIdMiddleware = require('./src/middlewares/requestId');
 const { apiLimiter } = require('./src/middlewares/rateLimiter');
 
 // Importar rotas
+console.log('🔄 Starting routes import...');
+const weatherRoutes = require('./src/routes/weatherRoutes');
 const authRoutes = require('./src/routes/authRoutes');
 const projectRoutes = require('./src/routes/projectRoutes');
 const { crudRouter } = require('./src/routes/projectRoutes');
@@ -115,6 +118,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/members', memberRoutes);
 app.use('/api/notices', noticeRoutes);
+app.use('/api/weather', weatherRoutes);
 
 // Rota raiz
 app.get('/', (req, res) => {

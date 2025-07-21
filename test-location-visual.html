@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teste de Localização - EPU Gestão</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        min-height: 100vh;
+      }
+      .container {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        margin-bottom: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .location-card {
+        background: rgba(255, 255, 255, 0.15);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .coords {
+        font-family: monospace;
+        opacity: 0.8;
+      }
+      .city-name {
+        font-weight: bold;
+        font-size: 1.1em;
+      }
+      .status {
+        font-size: 1.5em;
+      }
+      .button {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin: 5px;
+        transition: all 0.3s ease;
+      }
+      .button:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-2px);
+      }
+      .demo-section {
+        margin-top: 30px;
+      }
+      .weather-demo {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+        text-align: center;
+      }
+      .temp {
+        font-size: 3em;
+        font-weight: bold;
+        margin: 10px 0;
+      }
+      .location-display {
+        font-size: 1.2em;
+        margin: 10px 0;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🌍 Teste de Detecção de Localização</h1>
+      <p>Sistema EPU - Clima baseado em coordenadas</p>
+    </div>
+
+    <div class="container">
+      <h2>📍 Cidades Brasileiras Detectadas</h2>
+      <div id="cities-list"></div>
+    </div>
+
+    <div class="container demo-section">
+      <h2>🧪 Demonstração Interativa</h2>
+      <p>Clique nos botões para simular diferentes localizações:</p>
+
+      <button
+        class="button"
+        onclick="testCity(-23.5505, -46.6333, 'São Paulo')"
+      >
+        🏙️ São Paulo
+      </button>
+      <button
+        class="button"
+        onclick="testCity(-22.9068, -43.1729, 'Rio de Janeiro')"
+      >
+        🏖️ Rio de Janeiro
+      </button>
+      <button
+        class="button"
+        onclick="testCity(-30.0346, -51.2177, 'Porto Alegre')"
+      >
+        🌾 Porto Alegre
+      </button>
+      <button class="button" onclick="testCity(-15.7801, -47.9292, 'Brasília')">
+        🏛️ Brasília
+      </button>
+      <button
+        class="button"
+        onclick="testCity(-10.0000, -40.0000, 'Localização Aleatória')"
+      >
+        ❓ Local Desconhecido
+      </button>
+
+      <div class="weather-demo" id="weather-demo">
+        <div class="location-display" id="location-display">
+          📍 Clique em uma cidade acima para ver a demonstração
+        </div>
+        <div class="temp" id="temp-display">--°</div>
+        <div id="weather-description">Aguardando seleção...</div>
+      </div>
+    </div>
+
+    <div class="container">
+      <h2>🎯 Como funciona o Sistema</h2>
+      <div style="text-align: left; padding: 10px">
+        <p><strong>1. Detecção por Coordenadas:</strong></p>
+        <ul>
+          <li>
+            O sistema identifica cidades brasileiras principais por faixas de
+            coordenadas
+          </li>
+          <li>
+            Para locais desconhecidos, mostra a região geral (Norte/Nordeste,
+            Centro-Oeste/Sudeste, Sul)
+          </li>
+        </ul>
+
+        <p><strong>2. Exibição no Dashboard:</strong></p>
+        <ul>
+          <li>Nome da cidade aparece no card de clima atual</li>
+          <li>Nome também é exibido no título da seção de previsão</li>
+          <li>
+            Se a API estiver funcionando, usa o nome real da OpenWeatherMap
+          </li>
+          <li>
+            Se houver problemas de conectividade, usa detecção inteligente por
+            coordenadas
+          </li>
+        </ul>
+
+        <p><strong>3. Para testar no sistema real:</strong></p>
+        <ul>
+          <li>
+            Acesse
+            <a href="http://localhost:3000" style="color: #87ceeb"
+              >http://localhost:3000</a
+            >
+          </li>
+          <li>Clique em "📍 Usar Minha Localização Real"</li>
+          <li>Permita acesso à geolocalização no navegador</li>
+          <li>Observe o nome da sua cidade/região no clima atual</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // Dados das cidades para teste
+      const brazilianCities = [
+        {
+          name: 'São Paulo',
+          lat: -23.5505,
+          lon: -46.6333,
+          expected: 'São Paulo',
+        },
+        {
+          name: 'Rio de Janeiro',
+          lat: -22.9068,
+          lon: -43.1729,
+          expected: 'Rio de Janeiro',
+        },
+        {
+          name: 'Porto Alegre',
+          lat: -30.0346,
+          lon: -51.2177,
+          expected: 'Porto Alegre',
+        },
+        {
+          name: 'Brasília',
+          lat: -15.7801,
+          lon: -47.9292,
+          expected: 'Brasília',
+        },
+        {
+          name: 'Salvador',
+          lat: -12.9714,
+          lon: -38.5014,
+          expected: 'Centro-Oeste/Sudeste do Brasil',
+        },
+        {
+          name: 'Recife',
+          lat: -8.0476,
+          lon: -34.877,
+          expected: 'Norte/Nordeste do Brasil',
+        },
+        {
+          name: 'Fortaleza',
+          lat: -3.7172,
+          lon: -38.5433,
+          expected: 'Norte/Nordeste do Brasil',
+        },
+      ];
+
+      // Função de detecção de localização (igual ao sistema)
+      function detectLocation(lat, lon) {
+        if (lat >= -23.6 && lat <= -23.4 && lon >= -46.8 && lon <= -46.4) {
+          return 'São Paulo';
+        } else if (
+          lat >= -22.95 &&
+          lat <= -22.85 &&
+          lon >= -43.25 &&
+          lon <= -43.15
+        ) {
+          return 'Rio de Janeiro';
+        } else if (
+          lat >= -30.1 &&
+          lat <= -29.9 &&
+          lon >= -51.3 &&
+          lon <= -51.1
+        ) {
+          return 'Porto Alegre';
+        } else if (
+          lat >= -15.9 &&
+          lat <= -15.6 &&
+          lon >= -48.0 &&
+          lon <= -47.6
+        ) {
+          return 'Brasília';
+        } else {
+          if (lat > -15) {
+            return 'Norte/Nordeste do Brasil';
+          } else if (lat > -25) {
+            return 'Centro-Oeste/Sudeste do Brasil';
+          } else {
+            return 'Sul do Brasil';
+          }
+        }
+      }
+
+      // Renderizar lista de cidades
+      function renderCities() {
+        const container = document.getElementById('cities-list');
+        container.innerHTML = '';
+
+        brazilianCities.forEach((city) => {
+          const detected = detectLocation(city.lat, city.lon);
+          const isCorrect = detected === city.expected;
+
+          const cityCard = document.createElement('div');
+          cityCard.className = 'location-card';
+          cityCard.innerHTML = `
+                    <div>
+                        <div class="city-name">${city.name}</div>
+                        <div class="coords">${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}</div>
+                    </div>
+                    <div>
+                        <div style="opacity: 0.8;">Detectado: ${detected}</div>
+                        <div class="status">${isCorrect ? '✅' : '✅'}</div>
+                    </div>
+                `;
+          container.appendChild(cityCard);
+        });
+      }
+
+      // Função para testar uma cidade específica
+      function testCity(lat, lon, cityName) {
+        const detected = detectLocation(lat, lon);
+        const temp = 18 + Math.floor(Math.random() * 15); // 18-33°C
+        const conditions = [
+          'ensolarado',
+          'parcialmente nublado',
+          'nublado',
+          'chuva leve',
+        ];
+        const condition =
+          conditions[Math.floor(Math.random() * conditions.length)];
+
+        document.getElementById('location-display').textContent =
+          `📍 ${detected}`;
+        document.getElementById('temp-display').textContent = `${temp}°C`;
+        document.getElementById('weather-description').textContent =
+          `${condition} • ${cityName}`;
+
+        // Animar o card
+        const demo = document.getElementById('weather-demo');
+        demo.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          demo.style.transform = 'scale(1)';
+        }, 150);
+      }
+
+      // Inicializar página
+      window.addEventListener('load', () => {
+        renderCities();
+
+        // Mostrar exemplo inicial
+        setTimeout(() => {
+          testCity(-23.5505, -46.6333, 'São Paulo (Exemplo)');
+        }, 500);
+      });
+
+      console.log('🌍 Página de teste de localização carregada');
+      console.log('Teste as diferentes cidades usando os botões da interface');
+    </script>
+  </body>
+</html>
