@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import {
   device,
@@ -470,9 +470,12 @@ const LocationButton = styled.button`
   border-radius: 25px;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 1rem;
+  margin: 0.5rem;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 
   &:hover {
     transform: translateY(-2px);
@@ -487,6 +490,191 @@ const LocationButton = styled.button`
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
+  }
+`;
+
+const MoreInfoButton = styled.button`
+  background: linear-gradient(135deg, #3498db 0%, #2ecc71 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 0.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+
+  @media ${device.mobile} {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.8rem;
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const WeatherActionsContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+
+  @media ${device.mobile} {
+    gap: 0.5rem;
+    margin: 1rem 0;
+  }
+`;
+
+const DetailedInfoModal = styled.div<{ show: boolean }>`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: ${(props) => (props.show ? 'flex' : 'none')};
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  animation: ${(props) => (props.show ? 'fadeIn' : 'fadeOut')} 0.3s ease;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+`;
+
+const ModalContent = styled.div`
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border-radius: 20px;
+  padding: 2rem;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  position: relative;
+  animation: slideIn 0.3s ease;
+
+  @keyframes slideIn {
+    from {
+      transform: translateY(-50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @media ${device.mobile} {
+    padding: 1.5rem;
+    max-width: 95vw;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 1rem;
+
+    h3 {
+      margin: 0;
+      color: #2c3e50;
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .close-button {
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+
+      &:hover {
+        background: #c0392b;
+        transform: scale(1.1);
+      }
+    }
+  }
+
+  .modal-body {
+    color: #2c3e50;
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+
+      @media ${device.mobile} {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .info-card {
+      background: linear-gradient(
+        135deg,
+        rgba(52, 152, 219, 0.1) 0%,
+        rgba(46, 204, 113, 0.1) 100%
+      );
+      border-radius: 12px;
+      padding: 1rem;
+      border: 1px solid rgba(52, 152, 219, 0.2);
+
+      h4 {
+        margin: 0 0 0.5rem 0;
+        color: #3498db;
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      p {
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.4;
+      }
+    }
   }
 `;
 
@@ -572,6 +760,45 @@ const DashboardWeatherSection: React.FC<WeatherSectionProps> = ({
   requestLocation,
   getWeatherIcon,
 }) => {
+  const [showDetailedInfo, setShowDetailedInfo] = useState(false);
+
+  const toggleDetailedInfo = () => {
+    setShowDetailedInfo(!showDetailedInfo);
+  };
+
+  const getDetailedWeatherInfo = () => {
+    if (!weather) return null;
+
+    return {
+      location: {
+        title: '🗺️ Localização',
+        info: `${weather.location}${userLocation?.lat && userLocation?.lon ? ` (${userLocation.lat.toFixed(2)}, ${userLocation.lon.toFixed(2)})` : ''}`,
+      },
+      current: {
+        title: '🌡️ Condições Atuais',
+        info: `${weather.temperature}°C, ${weather.description}. Sensação térmica pode variar de acordo com umidade e vento.`,
+      },
+      humidity: {
+        title: '💧 Umidade do Ar',
+        info: `${weather.humidity}% - ${weather.humidity > 70 ? 'Alta umidade, ambiente pode parecer mais quente' : weather.humidity < 30 ? 'Baixa umidade, ar seco' : 'Umidade adequada para conforto'}`,
+      },
+      wind: {
+        title: '💨 Vento',
+        info: `${weather.windSpeed} km/h - ${weather.windSpeed > 20 ? 'Vento forte, cuidado ao sair' : weather.windSpeed > 10 ? 'Brisa moderada' : 'Vento calmo'}`,
+      },
+      forecast: {
+        title: '📅 Previsão Estendida',
+        info: `Exibindo ${forecastDays} dias de previsão. ${hasRequestedLocation ? `Primeiros 5 dias baseados em dados reais da API meteorológica, demais são estimativas.` : 'Dados simulados para demonstração.'}`,
+      },
+      api: {
+        title: '🌐 Fonte dos Dados',
+        info: hasRequestedLocation
+          ? 'Dados obtidos via API meteorológica em tempo real com base na sua localização GPS.'
+          : "Dados simulados para demonstração. Clique em 'Usar Minha Localização Real' para dados precisos.",
+      },
+    };
+  };
+
   return (
     <WeatherSection>
       <WeatherTitle>
@@ -624,6 +851,18 @@ const DashboardWeatherSection: React.FC<WeatherSectionProps> = ({
       <WeatherControls>
         <div className="days-selector">
           <span>📅 Previsão para:</span>
+          {forecastDays > 5 && hasRequestedLocation && (
+            <span
+              style={{
+                fontSize: '0.7rem',
+                color: '#3498db',
+                marginLeft: '0.5rem',
+                fontStyle: 'italic',
+              }}
+            >
+              (5 dias reais + {forecastDays - 5} estimados)
+            </span>
+          )}
         </div>
         <div className="quick-buttons">
           <button
@@ -646,6 +885,21 @@ const DashboardWeatherSection: React.FC<WeatherSectionProps> = ({
           </button>
         </div>
       </WeatherControls>
+
+      {/* Botões de Ação - Sempre Visíveis */}
+      <WeatherActionsContainer>
+        <LocationButton
+          onClick={requestLocation}
+          disabled={loadingWeather && hasRequestedLocation}
+        >
+          📍 Usar Minha Localização Real
+        </LocationButton>
+        {weather && !loadingWeather && (
+          <MoreInfoButton onClick={toggleDetailedInfo}>
+            ℹ️ Mais Informações
+          </MoreInfoButton>
+        )}
+      </WeatherActionsContainer>
 
       {/* Card de Clima Atual */}
       {weather && !loadingWeather && (
@@ -680,22 +934,36 @@ const DashboardWeatherSection: React.FC<WeatherSectionProps> = ({
           <div className="loading-subtitle">
             {hasRequestedLocation
               ? 'Conectando com API meteorológica - pode levar alguns segundos'
-              : 'Clique no botão abaixo para solicitar dados reais da sua região'}
+              : 'Use o botão acima para solicitar dados reais da sua região'}
           </div>
-          {!hasRequestedLocation && (
-            <LocationButton
-              onClick={requestLocation}
-              disabled={loadingWeather && hasRequestedLocation}
-            >
-              📍 Usar Minha Localização Real
-            </LocationButton>
-          )}
         </LoadingCard>
       ) : forecast.length > 0 ? (
         <>
           <ForecastGrid>
             {forecast.map((day, index) => (
-              <WeatherCard key={index}>
+              <WeatherCard
+                key={index}
+                style={{
+                  opacity: index >= 5 ? 0.85 : 1,
+                  border:
+                    index >= 5 ? '1px dashed #3498db50' : '1px solid #e0e0e0',
+                  position: 'relative',
+                }}
+              >
+                {index >= 5 && hasRequestedLocation && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      fontSize: '0.6rem',
+                      color: '#3498db',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    EST
+                  </div>
+                )}
                 <div className="date">{day.date}</div>
                 <div className="icon">{getWeatherIcon(day.icon)}</div>
                 <div className="temperature">
@@ -719,22 +987,16 @@ const DashboardWeatherSection: React.FC<WeatherSectionProps> = ({
           </ForecastGrid>
           {!hasRequestedLocation && (
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-              <LocationButton
-                onClick={requestLocation}
-                disabled={loadingWeather && hasRequestedLocation}
-              >
-                📍 Usar Minha Localização Real
-              </LocationButton>
               <p
                 style={{
                   fontSize: '0.8rem',
                   color: '#6c757d',
-                  marginTop: '0.5rem',
+                  margin: '0.5rem 0',
                   fontStyle: 'italic',
                 }}
               >
-                Os dados atuais são simulados. Clique acima para dados reais da
-                sua região.
+                Os dados atuais são simulados. Use o botão "📍 Usar Minha
+                Localização Real" acima para dados precisos da sua região.
               </p>
             </div>
           )}
@@ -748,11 +1010,50 @@ const DashboardWeatherSection: React.FC<WeatherSectionProps> = ({
           <div className="loading-subtitle">
             Verifique sua conexão e tente novamente
           </div>
-          <LocationButton onClick={requestLocation}>
-            🔄 Tentar Novamente
-          </LocationButton>
         </LoadingCard>
       )}
+
+      {/* Modal de Informações Detalhadas */}
+      <DetailedInfoModal show={showDetailedInfo}>
+        <ModalContent>
+          <div className="modal-header">
+            <h3>🌤️ Informações Meteorológicas Detalhadas</h3>
+            <button className="close-button" onClick={toggleDetailedInfo}>
+              ×
+            </button>
+          </div>
+          <div className="modal-body">
+            {weather && (
+              <div className="info-grid">
+                {Object.entries(getDetailedWeatherInfo() || {}).map(
+                  ([key, item]) => (
+                    <div key={key} className="info-card">
+                      <h4>{item.title}</h4>
+                      <p>{item.info}</p>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            <div
+              style={{
+                textAlign: 'center',
+                marginTop: '1rem',
+                padding: '1rem',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderRadius: '8px',
+              }}
+            >
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#2c3e50' }}>
+                <strong>💡 Dica:</strong> Para obter dados meteorológicos mais
+                precisos e atualizados, clique no botão "📍 Usar Minha
+                Localização Real" e permita o acesso à sua localização.
+              </p>
+            </div>
+          </div>
+        </ModalContent>
+      </DetailedInfoModal>
     </WeatherSection>
   );
 };

@@ -7,8 +7,9 @@ export { default as DashboardPage } from './DashboardPage';
 
 // Management Pages
 export { default as ProjectsPage } from './ProjectsPage';
-export { default as TeamsPage } from './Teams';
-export { default as MembersPage } from './Members';
+export { default as TeamsPage } from './TeamsIntegrated';
+export { default as TeamsWorkingPage } from './TeamsWorking';
+export { default as MembersPage } from './MembersWorking';
 
 // User Pages
 export { default as ProfilePage } from './Profile';

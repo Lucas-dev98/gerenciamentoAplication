@@ -54,7 +54,7 @@ const DashboardPage: React.FC = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Estados das estatísticas
-  const [stats] = useState<DashboardStats>({
+  const [stats, setStats] = useState<DashboardStats>({
     totalMembers: 156,
     totalTeams: 8,
     birthdaysToday: 3,

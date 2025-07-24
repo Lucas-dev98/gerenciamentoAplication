@@ -416,10 +416,10 @@ class WeatherService {
       dailyData[dateKey].push(item);
     });
 
-    // Processar cada dia (máximo baseado no requestedDays)
-    const days = Object.keys(dailyData).slice(0, Math.min(requestedDays, 5)); // API limita a 5 dias
+    // Processar cada dia (máximo de 5 dias da API)
+    const apiDays = Object.keys(dailyData).slice(0, 5); // API limita a 5 dias reais
 
-    const result = days.map((dateKey, index) => {
+    const result = apiDays.map((dateKey, index) => {
       const dayData = dailyData[dateKey];
       const date = new Date(dateKey);
 
@@ -459,16 +459,21 @@ class WeatherService {
       };
     });
 
-    // Se requestedDays for maior que o que a API fornece (5), adicionar dias fictícios
-    if (requestedDays > result.length && requestedDays <= 10) {
+    console.log(`✅ Processados ${result.length} dias da API real`);
+
+    // Se requestedDays for maior que 5, adicionar previsões simuladas realistas
+    if (requestedDays > result.length && requestedDays <= 14) {
       const additionalDays = this.generateExtendedForecast(
         result,
         requestedDays - result.length
       );
       result.push(...additionalDays);
+      console.log(
+        `📅 Adicionados ${additionalDays.length} dias simulados para completar ${requestedDays} dias`
+      );
     }
 
-    return result;
+    return result.slice(0, requestedDays); // Garantir que retorna exatamente o solicitado
   }
 
   private getMockCurrentWeather(lat?: number, lon?: number): WeatherData {
@@ -530,24 +535,84 @@ class WeatherService {
   ): WeatherForecast[] {
     const extendedDays: WeatherForecast[] = [];
     const lastDay = baseForecast[baseForecast.length - 1];
+    const today = new Date();
 
-    // Padrões de clima para gerar previsões realistas
-    const weatherPatterns = [
-      { description: 'ensolarado', icon: '01d', tempVariation: 0 },
-      { description: 'parcialmente nublado', icon: '02d', tempVariation: -2 },
-      { description: 'nublado', icon: '03d', tempVariation: -3 },
-      { description: 'chuva leve', icon: '10d', tempVariation: -5 },
-      { description: 'chuva', icon: '09d', tempVariation: -7 },
+    // Padrões de clima sazonais mais realistas para Brasil
+    const seasonalPatterns = [
+      {
+        description: 'ensolarado',
+        icon: '01d',
+        tempVariation: 0,
+        probability: 0.25,
+      },
+      {
+        description: 'parcialmente nublado',
+        icon: '02d',
+        tempVariation: -1,
+        probability: 0.3,
+      },
+      {
+        description: 'nublado',
+        icon: '03d',
+        tempVariation: -2,
+        probability: 0.2,
+      },
+      {
+        description: 'chuva leve',
+        icon: '10d',
+        tempVariation: -4,
+        probability: 0.15,
+      },
+      {
+        description: 'chuva',
+        icon: '09d',
+        tempVariation: -6,
+        probability: 0.08,
+      },
+      {
+        description: 'trovoada',
+        icon: '11d',
+        tempVariation: -5,
+        probability: 0.02,
+      },
     ];
 
-    for (let i = 0; i < additionalDays && i < 5; i++) {
-      // Máximo 5 dias adicionais
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + baseForecast.length + i);
+    // Determinar tendência baseada nos últimos dias da API
+    const tempTrend =
+      baseForecast.length > 1
+        ? (baseForecast[baseForecast.length - 1].temperature.max -
+            baseForecast[0].temperature.max) /
+          baseForecast.length
+        : 0;
 
-      const pattern =
-        weatherPatterns[Math.floor(Math.random() * weatherPatterns.length)];
+    for (let i = 0; i < additionalDays && i < 9; i++) {
+      // Máximo 9 dias adicionais para 14 dias total
+      const futureDate = new Date(today);
+      futureDate.setDate(today.getDate() + baseForecast.length + i);
+
+      // Selecionar padrão climático baseado em probabilidades
+      const random = Math.random();
+      let selectedPattern = seasonalPatterns[0];
+      let cumulative = 0;
+
+      for (const pattern of seasonalPatterns) {
+        cumulative += pattern.probability;
+        if (random <= cumulative) {
+          selectedPattern = pattern;
+          break;
+        }
+      }
+
+      // Calcular temperatura baseada no último dia real + tendência + variação sazonal
       const baseTemp = lastDay.temperature.max;
+      const trendAdjustment = tempTrend * (i + 1); // Aplicar tendência gradualmente
+      const seasonalVariation = selectedPattern.tempVariation;
+      const randomVariation = (Math.random() - 0.5) * 4; // ±2°C de variação aleatória
+
+      const maxTemp = Math.round(
+        baseTemp + trendAdjustment + seasonalVariation + randomVariation
+      );
+      const minTemp = Math.round(maxTemp - 8 - Math.random() * 4); // Diferença típica de 8-12°C
 
       extendedDays.push({
         date: futureDate.toLocaleDateString('pt-BR', {
@@ -556,18 +621,23 @@ class WeatherService {
           month: 'short',
         }),
         temperature: {
-          min: Math.round(baseTemp + pattern.tempVariation - 5),
-          max: Math.round(
-            baseTemp + pattern.tempVariation + Math.random() * 4 - 2
-          ),
+          min: Math.max(5, minTemp), // Mínimo absoluto de 5°C
+          max: Math.min(45, maxTemp), // Máximo absoluto de 45°C
         },
-        description: pattern.description,
-        icon: pattern.icon,
-        humidity: Math.round(60 + Math.random() * 30),
-        windSpeed: Math.round(8 + Math.random() * 20),
+        description: selectedPattern.description,
+        icon: selectedPattern.icon,
+        humidity: Math.round(
+          lastDay.humidity + (Math.random() - 0.5) * 20 // Variação de ±10%
+        ),
+        windSpeed: Math.round(
+          lastDay.windSpeed + (Math.random() - 0.5) * 10 // Variação de ±5 km/h
+        ),
       });
     }
 
+    console.log(
+      `🔮 Geradas ${extendedDays.length} previsões simuladas com base em dados reais`
+    );
     return extendedDays;
   }
 
